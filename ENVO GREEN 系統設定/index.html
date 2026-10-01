@@ -230,7 +230,7 @@
                         </tbody>
                     </table>
                 </div>
-                <div v-if="!filteredDrawings.length" class="text-center text-gray-400 py-12">沒有符合條件的圖面</div>
+                <div v-if="!filteredDrawings.length" class="text-center text-gray-400 py-12">{{ drawings.length ? '沒有符合條件的圖面' : '尚無圖面，按「新增圖面」登錄第一張' }}</div>
             </div>
         </section>
 
@@ -288,7 +288,7 @@
                         </tr>
                     </tbody>
                 </table>
-                <div v-if="!tabProjects.length" class="text-center text-gray-400 py-12 text-sm">此狀態沒有案件</div>
+                <div v-if="!tabProjects.length" class="text-center text-gray-400 py-12 text-sm">{{ projects.length ? '此狀態沒有案件' : '尚無專案' }}</div>
             </div>
             <p class="text-xs text-gray-400 mt-2">
                 欄位依「專案項目設定」與「各狀態的設定 › 設定使用項目」顯示；列底色依「依日期欄位設定顏色」規則。
@@ -391,6 +391,7 @@
                                 </tr>
                             </tbody>
                         </table>
+                        <div v-if="!accounts.length" class="text-center text-gray-400 py-8 text-sm">尚無帳號，輸入 Email 後按「邀請」</div>
                     </div>
                     <p class="text-xs text-gray-400">權限變更於該帳號重新登入後生效。至少須保留一位管理員。</p>
                 </div>
@@ -412,7 +413,7 @@
                                 </tr>
                             </tbody>
                         </table>
-                        <div v-if="!filteredLogs.length" class="text-center text-gray-400 py-8 text-sm">此區間無操作記錄</div>
+                        <div v-if="!filteredLogs.length" class="text-center text-gray-400 py-8 text-sm">尚無操作記錄</div>
                     </div>
                 </div>
 
@@ -748,6 +749,7 @@
                                 </tr>
                             </tbody>
                         </table>
+                        <div v-if="!accounts.length" class="text-center text-gray-400 py-8 text-sm">尚無帳號，請先在「帳戶管理」邀請</div>
                     </div>
                     <p class="text-xs text-gray-400 mt-2">以 Email 通知。該資料或狀態權限為「不可檢視」的帳號不會收到通知。目前開啟 {{ notifyOnCount }} 項。</p>
                 </div>
@@ -809,11 +811,10 @@
 <script>
     const { createApp, ref, reactive, computed, watch } = Vue;
 
-    const STORAGE_KEY = 'envoGreenSettings_v1';
+    const STORAGE_KEY = 'envoGreenSettings_v2';
     const DAY = 86400000;
     const TODAY = new Date(); TODAY.setHours(0, 0, 0, 0);
     const daysAgo = n => new Date(TODAY.getTime() - n * DAY).toISOString();
-    const daysLater = n => new Date(TODAY.getTime() + n * DAY).toISOString().slice(0, 10);
 
     // 13 個狀態
     const STATUSES = [
@@ -873,9 +874,9 @@
                 drawingNo: range(0, 11), preview: range(0, 11), material: range(0, 11),
             },
             statusDisplay: STATUSES.map(() => 'case'),
-            colorRules: [{ field: 'dueDate', cond: 'after', days: 0, color: '#fde2e7', statuses: [2, 3] }],
+            colorRules: [],
             toggles: { assembly: false, continuousEntry: false, caseGroup: false },
-            aiPrompts: { common: [{ item: '品名', prompt: '依圖面標題欄的品名填寫，保留原文用語；若為拆分圖，品名不加 (1/2)、(2/2)。' }], customer: [] },
+            aiPrompts: { common: [], customer: [] },
             excelTemplates: { 報價單: [], 訂單: [], 工序單: [], 檢驗報告: [], 不良品管理表: [], 產品樣本: [] },
             stamps: [],
             docSettings: {
@@ -883,21 +884,16 @@
                 deliverySettings: { modes: [{ name: '預設', cols: '圖號・品名' }], templates: [] },
                 invoiceSettings: { modes: [{ name: '預設', cols: '交貨日期・圖號・品名' }], templates: [] },
             },
-            partners: [{ id: 1, name: 'TEST', kind: '客戶', isDefault: false }, { id: 2, name: 'CSBC高雄', kind: '客戶', isDefault: false }],
+            drawings: [],
+            partners: [],
             units: [],
-            accounts: [
-                { id: 1, name: '劉雅昀', email: 'liu@example.com', role: '管理員' },
-                { id: 2, name: 'EGH', email: 'egh@example.com', role: '管理員' },
-            ],
-            me: { name: '劉雅昀', email: 'liu@example.com' },
+            accounts: [],
+            me: { name: '', email: '' },
             security: { mfa: false, ipRestrict: 'none' },
             ipGroups: [],
             notify: {},
             perms: null,
-            company: {
-                name: '環菱重工股份有限公司', zip: '100-0001', addr1: '高雄市', addr2: '千代田区千代田1-1', tel: '07-000-0000',
-                fax: '03-0000-0000', email: 'info@example.co.jp', taxId: '', logo: '', seal: '',
-            },
+            company: { name: '', zip: '', addr1: '', addr2: '', tel: '', fax: '', email: '', taxId: '', logo: '', seal: '' },
             locale: {
                 mine: { lang: '中文（繁體）', tz: 'Asia/Taipei', fmt: 'yyyy/mm/dd' },
                 defaults: { lang: '中文（繁體）', tz: 'Asia/Taipei', fmt: 'yyyy/mm/dd' },
@@ -948,41 +944,6 @@
         return p;
     }
 
-    // 樣本資料（不寫入設定儲存）
-    function sampleDrawings() {
-        const names = ['底座', '支撐架', '法蘭', '軸套', '蓋板', '吊耳', '加強肋', '導軌', '框架'];
-        const mats = ['SS400', 'S45C', 'SUS304', 'A36'];
-        return Array.from({ length: 18 }, (_, i) => {
-            const n = String(i % 9 + 1).padStart(3, '0');
-            const split = i >= 16 ? ` (${i - 15}/2)` : '';
-            return {
-                id: i + 1,
-                customer: i % 3 === 0 ? 'TEST' : 'CSBC高雄',
-                drawingNo: `EG2601F-MS10-0${Math.floor(i / 9) + 3}-${n}${split}`,
-                name: names[i % 9],
-                caseNo: i % 4 === 3 ? '' : `EG2601F-${String(i % 5 + 1).padStart(2, '0')}`,
-                material: mats[i % 4],
-                heat: i % 3 === 0 ? '調質' : (i % 3 === 1 ? '' : '退火'),
-                note: i % 5 === 0 ? '急件' : '',
-                createdAt: daysAgo(i * 3),
-                updatedAt: daysAgo(i % 7),
-            };
-        });
-    }
-    function sampleProjects() {
-        return STATUSES.flatMap((s, si) => Array.from({ length: si % 3 === 0 ? 2 : 1 }, (_, k) => {
-            const id = si * 10 + k + 1;
-            return {
-                id, status: si, caseNo: `EG2601F-${String(id).padStart(3, '0')}`,
-                customer: id % 2 ? 'CSBC高雄' : 'TEST', projectName: `船段結構件 ${id}`,
-                quoteNo: `Q26-${String(id).padStart(4, '0')}`, orderNo: si >= 2 ? `PO-${7000 + id}` : '',
-                unit: 'PCS', drawingNo: `EG2601F-MS10-03-${String(si + 1).padStart(3, '0')}`, name: ['底座', '法蘭', '支撐架'][id % 3],
-                material: ['SS400', 'SUS304'][id % 2], qty: (id % 5 + 1) * 2, subcon: '', site: '高雄廠', method: ['雷射切割', '車床', '銑床'][id % 3],
-                dueDate: daysLater(k ? -2 : 10 + si), deliveryDate: si >= 11 ? daysLater(-2) : '', deliveryQty: si >= 11 ? (id % 5 + 1) * 2 : '',
-                invoiced: si === 12 ? '已開立' : '', billingDate: si === 12 ? daysLater(-1) : '', note: k ? '' : '—',
-            };
-        }));
-    }
 
     function load() {
         const base = defaultState();
@@ -1015,7 +976,7 @@
             ];
 
             // ---------- 圖面列表 ----------
-            const drawings = ref(sampleDrawings());
+            const drawings = Vue.toRef(s, 'drawings');
             const drawingFilterFields = [
                 { key: 'customer', label: '客戶名稱' }, { key: 'drawingNo', label: '圖號' }, { key: 'name', label: '品名' },
                 { key: 'caseNo', label: '工程案號' }, { key: 'material', label: '材質' }, { key: 'heat', label: '熱處理' }, { key: 'note', label: '備註' },
@@ -1062,7 +1023,7 @@
             };
 
             // ---------- 專案列表 ----------
-            const projects = ref(sampleProjects());
+            const projects = ref([]);
             const projectTab = ref(-1);
             const emptyProjectFilter = () => ({ customer: '', projectName: '', unit: '', detail: '' });
             const projectFilter = reactive(emptyProjectFilter());
@@ -1276,13 +1237,7 @@
             };
 
             // ---------- 操作記錄 ----------
-            const logs = [
-                { id: 1, at: daysAgo(0), user: '劉雅昀', screen: '圖面詳細', target: 'EG2601F-MS10-03-001', op: '參考' },
-                { id: 2, at: daysAgo(1), user: 'EGH', screen: '專案列表', target: 'EG2601F-021', op: '編輯' },
-                { id: 3, at: daysAgo(2), user: '劉雅昀', screen: '設定', target: '公司資訊', op: '編輯' },
-                { id: 4, at: daysAgo(5), user: 'EGH', screen: '圖面詳細', target: 'EG2601F-MS10-04-002', op: '下載' },
-                { id: 5, at: daysAgo(12), user: '劉雅昀', screen: '圖面列表', target: 'EG2601F-MS10-03-005', op: '新增' },
-            ];
+            const logs = [];
             const logFilter = reactive({ from: daysAgo(7).slice(0, 10), to: TODAY.toISOString().slice(0, 10), user: '', op: '' });
             const filteredLogs = computed(() => logs.filter(l => {
                 const d = l.at.slice(0, 10);
@@ -1342,12 +1297,10 @@
                 { key: 'name', label: '公司名稱' }, { key: 'zip', label: '郵遞區號' }, { key: 'addr1', label: '地址1' }, { key: 'addr2', label: '地址2' },
                 { key: 'tel', label: '電話' }, { key: 'fax', label: '傳真' }, { key: 'email', label: 'Email' }, { key: 'taxId', label: '統一編號' },
             ];
-            const sampleDefaults = defaultState().company;
             const companyFieldIssue = k => {
                 const v = s.company[k];
-                if (['zip', 'addr2', 'fax', 'email'].includes(k) && v === sampleDefaults[k]) return '仍是日本範例預設值';
-                if (k === 'taxId' && !/^\d{8}$/.test(v || '')) return v ? '統一編號應為 8 碼數字' : '尚未填寫';
-                if (!v && ['name', 'addr1', 'tel'].includes(k)) return '尚未填寫';
+                if (k === 'taxId' && v && !/^\d{8}$/.test(v)) return '統一編號應為 8 碼數字';
+                if (!v && !['addr2', 'fax'].includes(k)) return '尚未填寫';
                 return '';
             };
             const companyIncomplete = computed(() => companyFields.some(f => companyFieldIssue(f.key)));
@@ -1364,7 +1317,7 @@
             const fmtDateTime = iso => { const d = new Date(iso); return fmtDate(iso) + ` ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
 
             return {
-                ...Vue.toRefs(s), statuses: STATUSES, roles: ROLES,
+                ...Vue.toRefs(s), drawings, statuses: STATUSES, roles: ROLES,
                 page, go, topTabs, toast, toastMsg,
                 drawings, drawingFilterFields, drawingFilter, clearDrawingFilters, drawingView, drawingSort, drawingPageSize,
                 filteredDrawings, pagedDrawings, drawingBasicVisible, drawingListColumns, isNewDrawing, newDrawing, openNewDrawing, saveNewDrawing,
