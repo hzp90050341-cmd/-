@@ -3,16 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ENVO GREEN 圖面與專案管理</title>
+    <title>ENVO GREEN 設定導覽</title>
 
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
 
     <!-- Vue 3 -->
-    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.4.21/vue.global.prod.min.js"></script>
 
     <!-- FontAwesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>window.FontAwesomeConfig = { autoReplaceSvg: 'nest' };</script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
 
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
@@ -22,10 +23,16 @@
             theme: {
                 extend: {
                     colors: {
-                        'envo': '#1f7a4d',        // 主色 綠
-                        'envo-dark': '#155c39',
-                        'envo-light': '#e8f5ee',
-                        'envo-pink': '#fde2e7',   // 交期提醒 淡粉紅
+                        'envo': 'var(--accent)',          // 主色 綠
+                        'envo-dark': 'var(--accent-strong)',
+                        'envo-light': 'var(--accent-soft)',
+                        'onaccent': 'var(--on-accent)',
+                        white: 'var(--surface)',
+                        gray: { 50: 'var(--g50)', 100: 'var(--g100)', 200: 'var(--g200)', 300: 'var(--g300)', 400: 'var(--g400)', 500: 'var(--g500)', 600: 'var(--g600)', 700: 'var(--g700)', 800: 'var(--g800)' },
+                        amber: { 50: 'var(--warn-bg)', 200: 'var(--warn-line)', 400: 'var(--warn-line)', 600: 'var(--warn-fg)', 700: 'var(--warn-fg)', 800: 'var(--warn-fg)' },
+                        red: { 400: 'var(--danger)', 500: 'var(--danger)', 600: 'var(--danger)' },
+                        purple: { 600: 'var(--ai)' },
+                        green: { 600: 'var(--accent)' },
                     },
                     fontFamily: {
                         sans: ['Noto Sans TC', 'sans-serif'],
@@ -36,8 +43,34 @@
     </script>
 
     <style>
+        /* 版面：頂部導覽＋左側設定選單的管理後台；綠色取自環保品牌，中性色帶一點綠 */
+        :root {
+            --bg: #f3f6f4; --surface: #ffffff; --fg: #1c2420;
+            --g50: #f6f8f7; --g100: #eceff0; --g200: #dfe4e2; --g300: #c9d0cd; --g400: #929b97; --g500: #67716d; --g600: #4b5551; --g700: #37403c; --g800: #1f2623;
+            --accent: #1f7a4d; --accent-strong: #155c39; --accent-soft: #e4f3ea; --on-accent: #ffffff;
+            --warn-bg: #fff7e0; --warn-line: #f0c86a; --warn-fg: #8a5a00;
+            --danger: #c62f3b; --ai: #6d3fc4; --row-fg: #1c2420;
+            --font-body: 'Noto Sans TC', system-ui, sans-serif;
+        }
+        @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+            --bg: #111614; --surface: #1a201d; --fg: #e3e9e6;
+            --g50: #202724; --g100: #27302c; --g200: #323c37; --g300: #45504b; --g400: #7d8a84; --g500: #9aa6a0; --g600: #b4beb9; --g700: #cdd5d1; --g800: #e3e9e6;
+            --accent: #4fbf86; --accent-strong: #2f8f5e; --accent-soft: #1c3428; --on-accent: #0c1410;
+            --warn-bg: #33290f; --warn-line: #7a5d1c; --warn-fg: #f0c86a;
+            --danger: #f0717b; --ai: #a988ec; color-scheme: dark;
+        } }
+        :root[data-theme="dark"] {
+            --bg: #111614; --surface: #1a201d; --fg: #e3e9e6;
+            --g50: #202724; --g100: #27302c; --g200: #323c37; --g300: #45504b; --g400: #7d8a84; --g500: #9aa6a0; --g600: #b4beb9; --g700: #cdd5d1; --g800: #e3e9e6;
+            --accent: #4fbf86; --accent-strong: #2f8f5e; --accent-soft: #1c3428; --on-accent: #0c1410;
+            --warn-bg: #33290f; --warn-line: #7a5d1c; --warn-fg: #f0c86a;
+            --danger: #f0717b; --ai: #a988ec; color-scheme: dark;
+        }
         [v-cloak] { display: none; }
-        body { background-color: #f4f6f5; color: #1f2937; }
+        body { background-color: var(--bg); color: var(--fg); font-family: var(--font-body); }
+        input, select, textarea { background-color: var(--surface); color: var(--fg); border-color: var(--g300); }
+        header.sticky { top: env(safe-area-inset-top, 0px); }
+        :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -45,15 +78,15 @@
         /* 開關 */
         .switch { position: relative; width: 42px; height: 24px; flex-shrink: 0; }
         .switch input { opacity: 0; width: 0; height: 0; }
-        .switch span { position: absolute; inset: 0; background: #d1d5db; border-radius: 9999px; transition: .2s; cursor: pointer; }
-        .switch span::before { content: ''; position: absolute; width: 18px; height: 18px; left: 3px; top: 3px; background: #fff; border-radius: 9999px; transition: .2s; }
-        .switch input:checked + span { background: #1f7a4d; }
+        .switch span { position: absolute; inset: 0; background: var(--g300); border-radius: 9999px; transition: .2s; cursor: pointer; }
+        .switch span::before { content: ''; position: absolute; width: 18px; height: 18px; left: 3px; top: 3px; background: #ffffff; border-radius: 9999px; transition: .2s; }
+        .switch input:checked + span { background: var(--accent); }
         .switch input:checked + span::before { transform: translateX(18px); }
 
         /* 拖曳 */
         .drag-item { cursor: grab; }
         .drag-item.dragging { opacity: .4; }
-        .drop-zone.over { outline: 2px dashed #1f7a4d; outline-offset: 2px; }
+        .drop-zone.over { outline: 2px dashed var(--accent); outline-offset: 2px; }
 
         .toast-enter-active, .toast-leave-active { transition: all .3s ease; }
         .toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(-10px); }
@@ -68,7 +101,7 @@
     <header class="bg-white border-b border-gray-200 sticky top-0 z-30">
         <div class="flex items-center gap-2 px-4 h-14">
             <div class="flex items-center gap-2 mr-4 shrink-0">
-                <div class="w-8 h-8 rounded bg-envo text-white flex items-center justify-center font-bold">E</div>
+                <div class="w-8 h-8 rounded bg-envo text-onaccent flex items-center justify-center font-bold">E</div>
                 <span class="font-bold text-envo hidden sm:inline">ENVO GREEN</span>
             </div>
             <nav class="flex gap-1 overflow-x-auto hide-scrollbar">
@@ -146,8 +179,8 @@
                     <span class="text-sm text-gray-500">全部 {{ drawings.length }} 件／符合 {{ filteredDrawings.length }} 件</span>
                     <div class="ml-auto flex flex-wrap items-center gap-2">
                         <div class="flex border rounded overflow-hidden text-sm">
-                            <button @click="drawingView = 'preview'" class="px-3 py-1" :class="drawingView === 'preview' ? 'bg-envo text-white' : 'bg-white'"><i class="fa-solid fa-table-cells-large mr-1"></i>預覽</button>
-                            <button @click="drawingView = 'list'" class="px-3 py-1" :class="drawingView === 'list' ? 'bg-envo text-white' : 'bg-white'"><i class="fa-solid fa-list mr-1"></i>清單</button>
+                            <button @click="drawingView = 'preview'" class="px-3 py-1" :class="drawingView === 'preview' ? 'bg-envo text-onaccent' : 'bg-white'"><i class="fa-solid fa-table-cells-large mr-1"></i>預覽</button>
+                            <button @click="drawingView = 'list'" class="px-3 py-1" :class="drawingView === 'list' ? 'bg-envo text-onaccent' : 'bg-white'"><i class="fa-solid fa-list mr-1"></i>清單</button>
                         </div>
                         <select v-model="drawingSort.key" class="border rounded px-2 py-1 text-sm">
                             <option value="updatedAt">最後更新時間</option>
@@ -161,7 +194,7 @@
                             <option :value="25">25 件</option><option :value="50">50 件</option><option :value="100">100 件</option>
                         </select>
                         <button @click="toast('批次操作：請先勾選圖面')" class="border border-envo text-envo rounded px-3 py-1 text-sm bg-white">批次操作</button>
-                        <button @click="openNewDrawing" class="bg-envo text-white rounded px-3 py-1 text-sm"><i class="fa-solid fa-plus mr-1"></i>新增圖面</button>
+                        <button @click="openNewDrawing" class="bg-envo text-onaccent rounded px-3 py-1 text-sm"><i class="fa-solid fa-plus mr-1"></i>新增圖面</button>
                     </div>
                 </div>
 
@@ -171,7 +204,7 @@
                             <svg viewBox="0 0 120 80" class="h-20 text-gray-400" fill="none" stroke="currentColor" stroke-width="1">
                                 <rect x="10" y="10" width="100" height="60"/><circle cx="40" cy="40" r="14"/><path d="M70 20h30v40H70z M10 40h16 M54 40h16"/>
                             </svg>
-                            <span v-if="isNewDrawing(d)" class="absolute top-1 left-1 bg-red-500 text-white text-[10px] px-1.5 rounded">NEW</span>
+                            <span v-if="isNewDrawing(d)" class="absolute top-1 left-1 bg-red-500 text-onaccent text-[10px] px-1.5 rounded">NEW</span>
                         </div>
                         <div class="p-2 text-xs space-y-0.5">
                             <div v-for="it in drawingBasicVisible" :key="it.key" class="truncate">
@@ -207,7 +240,7 @@
                 <h1 class="text-xl font-bold">專案列表</h1>
                 <div class="ml-auto flex gap-2">
                     <button @click="toast('表單清單：尚未建立帳票範本')" class="border border-envo text-envo rounded px-3 py-1 text-sm bg-white">表單清單</button>
-                    <button @click="toast('新專案：請先補齊交易對象主檔與單位主控')" class="bg-envo text-white rounded px-3 py-1 text-sm"><i class="fa-solid fa-plus mr-1"></i>新專案</button>
+                    <button @click="toast('新專案：請先補齊交易對象主檔與單位主控')" class="bg-envo text-onaccent rounded px-3 py-1 text-sm"><i class="fa-solid fa-plus mr-1"></i>新專案</button>
                 </div>
             </div>
             <div class="bg-white border rounded-lg p-3 mb-3 flex flex-wrap gap-2 items-end text-sm">
@@ -242,7 +275,7 @@
                         <tr><th v-for="c in projectColumns" :key="c.key" class="text-left px-3 py-2 whitespace-nowrap">{{ c.label }}</th></tr>
                     </thead>
                     <tbody>
-                        <tr v-for="p in tabProjects" :key="p.id" class="border-t" :style="{ backgroundColor: rowColor(p) || '' }">
+                        <tr v-for="p in tabProjects" :key="p.id" class="border-t" :style="rowColor(p) ? { backgroundColor: rowColor(p), color: 'var(--row-fg)' } : {}">
                             <td v-for="c in projectColumns" :key="c.key" class="px-3 py-2 whitespace-nowrap">
                                 <template v-if="c.key === 'status'">
                                     <span class="text-xs bg-envo-light text-envo rounded px-2 py-0.5">{{ statuses[p.status].zh }}</span>
@@ -283,7 +316,7 @@
         <section v-if="page === 'settings'" class="flex flex-col md:flex-row">
             <aside class="md:w-60 bg-white border-r border-gray-200 md:min-h-[calc(100vh-3.5rem)] p-3 shrink-0">
                 <button @click="settingPage = 'checklist'" class="w-full text-left px-3 py-2 rounded text-sm mb-2 flex items-center"
-                        :class="settingPage === 'checklist' ? 'bg-envo text-white' : 'bg-amber-50 text-amber-700'">
+                        :class="settingPage === 'checklist' ? 'bg-envo text-onaccent' : 'bg-amber-50 text-amber-700'">
                     <i class="fa-solid fa-list-check mr-2"></i>設定檢查清單
                     <span class="ml-auto text-xs">{{ checklistDone }}/{{ checklist.length }}</span>
                 </button>
@@ -343,7 +376,8 @@
                     <div class="bg-white border rounded-lg overflow-x-auto">
                         <div class="flex items-center px-4 py-2 border-b">
                             <span class="font-bold text-sm">帳號（{{ accounts.length }}）</span>
-                            <button @click="inviteAccount" class="ml-auto bg-envo text-white rounded px-3 py-1 text-sm"><i class="fa-solid fa-user-plus mr-1"></i>邀請</button>
+                            <input id="inviteEmail" v-model="inviteEmail" type="email" placeholder="邀請的 Email" class="ml-auto border rounded px-2 py-1 text-sm w-48">
+                            <button @click="inviteAccount" class="ml-2 bg-envo text-onaccent rounded px-3 py-1 text-sm"><i class="fa-solid fa-user-plus mr-1"></i>邀請</button>
                         </div>
                         <table class="w-full text-sm">
                             <thead class="bg-gray-50 text-xs text-gray-500"><tr><th class="text-left px-4 py-2">名稱</th><th class="text-left px-4 py-2">Email</th><th class="text-left px-4 py-2">權限</th><th></th></tr></thead>
@@ -353,7 +387,7 @@
                                     <td class="px-4 py-2 text-gray-500">{{ a.email }}</td>
                                     <td class="px-4 py-2"><select v-model="a.role" @change="toast('權限變更將於重新登入後生效')" class="border rounded px-2 py-1">
                                         <option v-for="r in roles" :key="r">{{ r }}</option></select></td>
-                                    <td class="px-4 py-2 text-right"><button @click="removeAccount(a)" class="text-red-500 text-xs">刪除</button></td>
+                                    <td class="px-4 py-2 text-right"><button @click="removeAccount(a)" class="text-red-500 text-xs">{{ pendingDelete === a.id ? '確定刪除？' : '刪除' }}</button></td>
                                 </tr>
                             </tbody>
                         </table>
@@ -402,7 +436,7 @@
                                     <span class="flex-1">{{ it.label }}</span>
                                     <span v-if="it.type" class="text-[10px] text-gray-400">{{ it.type }}</span>
                                     <button v-if="settingPage !== 'relatedDocs'" @click="it.ai = !it.ai" class="text-[10px] rounded px-1.5 border"
-                                            :class="it.ai ? 'bg-purple-600 text-white border-purple-600' : 'text-gray-400'" title="交給 AI 填寫">AI</button>
+                                            :class="it.ai ? 'bg-purple-600 text-onaccent border-purple-600' : 'text-gray-400'" title="交給 AI 填寫">AI</button>
                                     <button @click="moveDual(col, idx)" class="text-gray-400 hover:text-envo" :title="col === 'visible' ? '移至隱藏' : '移至顯示'">
                                         <i class="fa-solid" :class="col === 'visible' ? 'fa-arrow-right' : 'fa-arrow-left'"></i></button>
                                 </li>
@@ -414,7 +448,7 @@
                         <select v-if="settingPage === 'drawingDetail'" v-model="newItem.type" class="border rounded px-2 py-1">
                             <option v-for="t in ['文字','數值','日期','選擇']" :key="t">{{ t }}</option>
                         </select>
-                        <button @click="addDualItem" class="bg-envo text-white rounded px-3 py-1"><i class="fa-solid fa-plus mr-1"></i>新增項目</button>
+                        <button @click="addDualItem" class="bg-envo text-onaccent rounded px-3 py-1"><i class="fa-solid fa-plus mr-1"></i>新增項目</button>
                     </div>
                 </div>
 
@@ -462,7 +496,7 @@
                             <button @click="excelTemplates[excelTab].splice(i,1)" class="ml-auto text-red-500 text-xs">刪除</button>
                         </div>
                         <div v-if="!excelTemplates[excelTab].length" class="text-sm text-gray-400 mb-3">尚無範本</div>
-                        <label class="inline-block bg-envo text-white rounded px-3 py-1 text-sm cursor-pointer">
+                        <label class="inline-block bg-envo text-onaccent rounded px-3 py-1 text-sm cursor-pointer">
                             <i class="fa-solid fa-upload mr-1"></i>上傳 Excel 範本
                             <input type="file" accept=".xlsx,.xls" class="hidden" @change="uploadExcel">
                         </label>
@@ -481,7 +515,7 @@
                     </div>
                     <div v-if="!stamps.length" class="text-sm text-gray-400 mb-3">無資料</div>
                     <div class="flex gap-2 text-sm"><input v-model="newStamp" placeholder="印章名稱（例：檢驗、核准）" class="border rounded px-2 py-1">
-                        <button @click="addStamp" class="bg-envo text-white rounded px-3 py-1">新增</button></div>
+                        <button @click="addStamp" class="bg-envo text-onaccent rounded px-3 py-1">新增</button></div>
                 </div>
 
                 <!-- 單一開關頁 -->
@@ -519,7 +553,7 @@
                     <div class="mt-3 flex flex-wrap gap-2 text-sm">
                         <input v-model="newItem.label" placeholder="新增項目名稱" class="border rounded px-2 py-1">
                         <select v-model="newItem.type" class="border rounded px-2 py-1"><option v-for="t in ['文字','數值','日期','長文','選擇']" :key="t">{{ t }}</option></select>
-                        <button @click="addDualItem" class="bg-envo text-white rounded px-3 py-1"><i class="fa-solid fa-plus mr-1"></i>新增項目</button>
+                        <button @click="addDualItem" class="bg-envo text-onaccent rounded px-3 py-1"><i class="fa-solid fa-plus mr-1"></i>新增項目</button>
                     </div>
                     <p class="text-xs text-gray-400 mt-2">順序反映在案件一覽（全部）與案件詳細；「狀態」項目不能移到不使用區。</p>
                 </div>
@@ -598,7 +632,11 @@
                             <span class="flex-1">{{ m.name }}</span><span class="text-xs text-gray-400">{{ m.cols }}</span>
                             <span v-if="i === 0" class="text-[10px] bg-gray-100 rounded px-1.5">預設</span>
                         </div>
-                        <button @click="addDocMode" class="text-envo text-sm mt-1"><i class="fa-solid fa-plus mr-1"></i>新增模式</button>
+                        <div class="flex flex-wrap gap-2 text-sm mt-2">
+                            <input id="newModeName" v-model="newMode.name" placeholder="模式名稱" class="border rounded px-2 py-1">
+                            <input id="newModeCols" v-model="newMode.cols" placeholder="明細欄位（以・分隔）" class="border rounded px-2 py-1 flex-1">
+                            <button @click="addDocMode" class="border border-envo text-envo rounded px-3 py-1"><i class="fa-solid fa-plus mr-1"></i>新增模式</button>
+                        </div>
                     </div>
                     <div class="bg-white border rounded-lg p-4">
                         <div class="font-bold text-sm mb-2">帳票範本（格式與公司資訊）</div>
@@ -607,7 +645,10 @@
                             <button @click="docSettings[settingPage].templates.splice(i,1)" class="text-red-500 text-xs">刪除</button>
                         </div>
                         <div v-if="!docSettings[settingPage].templates.length" class="text-sm text-gray-400 mb-2">尚未建立帳票範本</div>
-                        <button @click="addDocTemplate" class="bg-envo text-white rounded px-3 py-1 text-sm"><i class="fa-solid fa-plus mr-1"></i>建立帳票範本</button>
+                        <div class="flex flex-wrap gap-2 text-sm">
+                            <input id="newTemplateName" v-model="newTemplateName" placeholder="帳票範本名稱" class="border rounded px-2 py-1 flex-1">
+                            <button @click="addDocTemplate" class="bg-envo text-onaccent rounded px-3 py-1"><i class="fa-solid fa-plus mr-1"></i>建立帳票範本</button>
+                        </div>
                         <p v-if="companyIncomplete" class="text-xs text-amber-600 mt-2"><i class="fa-solid fa-triangle-exclamation mr-1"></i>公司資訊尚未完整（仍有範例預設值或空白），帳票會帶入錯誤資料。</p>
                     </div>
                 </div>
@@ -630,7 +671,7 @@
                         <div class="border-t p-3 flex gap-2 text-sm">
                             <input v-model="newMaster.name" :placeholder="settingPage === 'partners' ? '客戶／廠商名稱' : '單位（例：PCS、SET、KG）'" class="border rounded px-2 py-1 flex-1">
                             <select v-if="settingPage === 'partners'" v-model="newMaster.kind" class="border rounded px-2 py-1"><option>客戶</option><option>廠商</option></select>
-                            <button @click="addMaster" class="bg-envo text-white rounded px-3 py-1">新增</button>
+                            <button @click="addMaster" class="bg-envo text-onaccent rounded px-3 py-1">新增</button>
                         </div>
                     </div>
                 </div>
@@ -684,7 +725,7 @@
                         <button @click="g.ips.push('')" class="text-envo text-xs"><i class="fa-solid fa-plus mr-1"></i>新增 IP</button>
                     </div>
                     <div v-if="!ipGroups.length" class="text-sm text-gray-400">尚未建立</div>
-                    <button @click="ipGroups.push({ name: '', ips: [currentIp] })" class="bg-envo text-white rounded px-3 py-1 text-sm"><i class="fa-solid fa-plus mr-1"></i>新增 IP 群組</button>
+                    <button @click="ipGroups.push({ name: '', ips: [currentIp] })" class="bg-envo text-onaccent rounded px-3 py-1 text-sm"><i class="fa-solid fa-plus mr-1"></i>新增 IP 群組</button>
                     <p v-if="ipGroups.length && !ipCoversCurrent" class="text-xs text-red-600">目前IP不在任何群組內，啟用限制後您將無法登入。</p>
                 </div>
 
@@ -754,14 +795,14 @@
             </div>
             <div class="flex justify-end gap-2 pt-2">
                 <button @click="newDrawing = null" class="border rounded px-3 py-1 text-sm">取消</button>
-                <button @click="saveNewDrawing" class="bg-envo text-white rounded px-3 py-1 text-sm">登錄</button>
+                <button @click="saveNewDrawing" class="bg-envo text-onaccent rounded px-3 py-1 text-sm">登錄</button>
             </div>
             <p v-if="toggles.continuousEntry" class="text-xs text-gray-400">已啟用連續輸入：登錄後將保留表單以繼續輸入下一張。</p>
         </div>
     </div>
 
     <transition name="toast">
-        <div v-if="toastMsg" class="fixed top-16 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-sm rounded px-4 py-2 z-50 shadow">{{ toastMsg }}</div>
+        <div v-if="toastMsg" class="fixed top-16 left-1/2 -translate-x-1/2 bg-envo-dark text-onaccent text-sm rounded px-4 py-2 z-50 shadow">{{ toastMsg }}</div>
     </transition>
 </div>
 
@@ -1188,14 +1229,17 @@
 
             // ---------- 單據 ----------
             const quoteTab = ref('標準報價單');
+            const newMode = reactive({ name: '', cols: '圖號・品名・材質' });
             const addDocMode = () => {
-                const name = prompt('模式名稱'); if (!name) return;
-                const cols = prompt('明細欄位（以・分隔）', '圖號・品名・材質') || '';
-                s.docSettings[settingPage.value].modes.push({ name, cols });
+                const name = newMode.name.trim(); if (!name) return toast('請輸入模式名稱');
+                s.docSettings[settingPage.value].modes.push({ name, cols: newMode.cols.trim() });
+                newMode.name = '';
             };
+            const newTemplateName = ref('');
             const addDocTemplate = () => {
-                const name = prompt('帳票範本名稱', currentSettingLabel.value.replace('設定', '') + '範本'); if (!name) return;
+                const name = newTemplateName.value.trim() || currentSettingLabel.value.replace('設定', '') + '範本';
                 s.docSettings[settingPage.value].templates.push(name);
+                newTemplateName.value = '';
             };
 
             // ---------- 主控 ----------
@@ -1216,14 +1260,19 @@
             const setDefaultPartner = p => s.partners.forEach(x => x.isDefault = x === p);
 
             // ---------- 帳號 ----------
+            const inviteEmail = ref('');
+            const pendingDelete = ref(null);
             const inviteAccount = () => {
-                const email = prompt('邀請的 Email'); if (!email) return;
+                const email = inviteEmail.value.trim();
+                if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return toast('請輸入有效的 Email');
+                inviteEmail.value = '';
                 s.accounts.push({ id: Date.now(), name: email.split('@')[0], email, role: '一般1' });
                 toast('已寄出邀請（語言與時區套用新邀請帳號預設值）');
             };
             const removeAccount = a => {
                 if (a.role === '管理員' && s.accounts.filter(x => x.role === '管理員').length <= 1) return toast('至少須保留一位管理員');
-                if (confirm(`確定刪除 ${a.name}？`)) s.accounts.splice(s.accounts.indexOf(a), 1);
+                if (pendingDelete.value !== a.id) { pendingDelete.value = a.id; return; }
+                s.accounts.splice(s.accounts.indexOf(a), 1); pendingDelete.value = null; toast(`已刪除 ${a.name}`);
             };
 
             // ---------- 操作記錄 ----------
@@ -1326,9 +1375,9 @@
                 aiItems, newPrompt, addCommonPrompt, addCustomerPrompt,
                 excelTabs, excelTab, uploadExcel, newStamp, addStamp,
                 statusTab, projectUsedNonStatus, toggleUsage, dateFields, moveRule,
-                quoteTab, addDocMode, addDocTemplate,
+                quoteTab, newMode, addDocMode, newTemplateName, addDocTemplate,
                 masterList, newMaster, addMaster, masterDrag, dropMaster, setDefaultPartner,
-                inviteAccount, removeAccount, logFilter, filteredLogs,
+                inviteEmail, pendingDelete, inviteAccount, removeAccount, logFilter, filteredLogs,
                 permTabs, permTab, permRows, permEditRole, hasPerm, setPerm, permText, permWarnings,
                 currentIp, validIp, ipCoversCurrent,
                 notifyTab, notifyCols, getNotify, setNotify, notifyOnCount,
