@@ -1,0 +1,1342 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ENVO GREEN 圖面與專案管理</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Vue 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'envo': '#1f7a4d',        // 主色 綠
+                        'envo-dark': '#155c39',
+                        'envo-light': '#e8f5ee',
+                        'envo-pink': '#fde2e7',   // 交期提醒 淡粉紅
+                    },
+                    fontFamily: {
+                        sans: ['Noto Sans TC', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+
+    <style>
+        [v-cloak] { display: none; }
+        body { background-color: #f4f6f5; color: #1f2937; }
+
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* 開關 */
+        .switch { position: relative; width: 42px; height: 24px; flex-shrink: 0; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .switch span { position: absolute; inset: 0; background: #d1d5db; border-radius: 9999px; transition: .2s; cursor: pointer; }
+        .switch span::before { content: ''; position: absolute; width: 18px; height: 18px; left: 3px; top: 3px; background: #fff; border-radius: 9999px; transition: .2s; }
+        .switch input:checked + span { background: #1f7a4d; }
+        .switch input:checked + span::before { transform: translateX(18px); }
+
+        /* 拖曳 */
+        .drag-item { cursor: grab; }
+        .drag-item.dragging { opacity: .4; }
+        .drop-zone.over { outline: 2px dashed #1f7a4d; outline-offset: 2px; }
+
+        .toast-enter-active, .toast-leave-active { transition: all .3s ease; }
+        .toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(-10px); }
+
+        th.sticky-col, td.sticky-col { position: sticky; left: 0; background: inherit; z-index: 1; }
+    </style>
+</head>
+<body>
+<div id="app" v-cloak class="min-h-screen flex flex-col">
+
+    <!-- ===================== 頂部導覽 ===================== -->
+    <header class="bg-white border-b border-gray-200 sticky top-0 z-30">
+        <div class="flex items-center gap-2 px-4 h-14">
+            <div class="flex items-center gap-2 mr-4 shrink-0">
+                <div class="w-8 h-8 rounded bg-envo text-white flex items-center justify-center font-bold">E</div>
+                <span class="font-bold text-envo hidden sm:inline">ENVO GREEN</span>
+            </div>
+            <nav class="flex gap-1 overflow-x-auto hide-scrollbar">
+                <button v-for="t in topTabs" :key="t.id" @click="go(t.id)"
+                        class="px-3 py-2 rounded text-sm whitespace-nowrap"
+                        :class="page === t.id ? 'bg-envo-light text-envo font-bold' : 'text-gray-600 hover:bg-gray-100'">
+                    <i :class="t.icon" class="mr-1"></i>{{ t.label }}
+                </button>
+            </nav>
+            <div class="ml-auto relative shrink-0">
+                <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+                <input v-model="globalSearch" @keyup.enter="runGlobalSearch" placeholder="自由文字搜尋"
+                       class="pl-8 pr-3 py-1.5 border border-gray-300 rounded text-sm w-36 sm:w-64 focus:outline-none focus:border-envo">
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1">
+
+        <!-- ===================== 自由文字搜尋結果 ===================== -->
+        <section v-if="page === 'search'" class="p-4 max-w-5xl mx-auto">
+            <h1 class="text-xl font-bold mb-1">搜尋結果：「{{ searchKeyword }}」</h1>
+            <p class="text-sm text-gray-500 mb-4">跨圖面與資料搜尋，共 {{ searchResults.drawings.length + searchResults.projects.length }} 件</p>
+            <div class="bg-white rounded-lg border mb-4">
+                <div class="px-4 py-2 border-b font-bold text-sm">圖面（{{ searchResults.drawings.length }}）</div>
+                <div v-for="d in searchResults.drawings" :key="d.id" class="px-4 py-2 border-b last:border-0 text-sm flex gap-4">
+                    <span class="font-mono text-envo">{{ d.drawingNo }}</span><span>{{ d.name }}</span><span class="text-gray-500">{{ d.customer }}</span>
+                </div>
+                <div v-if="!searchResults.drawings.length" class="px-4 py-6 text-center text-gray-400 text-sm">無符合的圖面</div>
+            </div>
+            <div class="bg-white rounded-lg border">
+                <div class="px-4 py-2 border-b font-bold text-sm">專案（{{ searchResults.projects.length }}）</div>
+                <div v-for="p in searchResults.projects" :key="p.id" class="px-4 py-2 border-b last:border-0 text-sm flex gap-4">
+                    <span class="font-mono text-envo">{{ p.caseNo }}</span><span>{{ p.projectName }}</span><span class="text-gray-500">{{ statuses[p.status].zh }}</span>
+                </div>
+                <div v-if="!searchResults.projects.length" class="px-4 py-6 text-center text-gray-400 text-sm">無符合的專案</div>
+            </div>
+        </section>
+
+        <!-- ===================== 圖面列表 ===================== -->
+        <section v-if="page === 'drawings'" class="flex flex-col md:flex-row">
+            <aside class="md:w-64 bg-white border-r border-gray-200 p-4 space-y-3 md:min-h-[calc(100vh-3.5rem)]">
+                <div class="flex items-center justify-between">
+                    <h2 class="font-bold">篩選</h2>
+                    <button @click="clearDrawingFilters" class="text-xs text-envo hover:underline">全部清除</button>
+                </div>
+                <div v-for="f in drawingFilterFields" :key="f.key">
+                    <label class="text-xs text-gray-500">{{ f.label }}</label>
+                    <input v-model="drawingFilter[f.key]" class="w-full border rounded px-2 py-1 text-sm focus:outline-none focus:border-envo">
+                </div>
+                <div>
+                    <label class="text-xs text-gray-500">登錄日期</label>
+                    <div class="flex items-center gap-1">
+                        <input type="date" v-model="drawingFilter.dateFrom" class="w-full border rounded px-1 py-1 text-xs">
+                        <span class="text-gray-400">~</span>
+                        <input type="date" v-model="drawingFilter.dateTo" class="w-full border rounded px-1 py-1 text-xs">
+                    </div>
+                </div>
+                <div>
+                    <label class="text-xs text-gray-500">未輸入</label>
+                    <select v-model="drawingFilter.missing" class="w-full border rounded px-2 py-1 text-sm">
+                        <option value="">（不指定）</option>
+                        <option v-for="f in drawingFilterFields" :key="f.key" :value="f.key">{{ f.label }} 未輸入</option>
+                    </select>
+                </div>
+                <label class="flex items-center gap-2 text-sm">
+                    <input type="checkbox" v-model="drawingFilter.unreadOnly" class="accent-envo">
+                    僅顯示未讀的新圖面（建立7日內）
+                </label>
+            </aside>
+
+            <div class="flex-1 p-4 min-w-0">
+                <div class="flex flex-wrap items-center gap-2 mb-4">
+                    <h1 class="text-xl font-bold">圖面列表</h1>
+                    <span class="text-sm text-gray-500">全部 {{ drawings.length }} 件／符合 {{ filteredDrawings.length }} 件</span>
+                    <div class="ml-auto flex flex-wrap items-center gap-2">
+                        <div class="flex border rounded overflow-hidden text-sm">
+                            <button @click="drawingView = 'preview'" class="px-3 py-1" :class="drawingView === 'preview' ? 'bg-envo text-white' : 'bg-white'"><i class="fa-solid fa-table-cells-large mr-1"></i>預覽</button>
+                            <button @click="drawingView = 'list'" class="px-3 py-1" :class="drawingView === 'list' ? 'bg-envo text-white' : 'bg-white'"><i class="fa-solid fa-list mr-1"></i>清單</button>
+                        </div>
+                        <select v-model="drawingSort.key" class="border rounded px-2 py-1 text-sm">
+                            <option value="updatedAt">最後更新時間</option>
+                            <option value="createdAt">登錄日期</option>
+                            <option value="drawingNo">圖號</option>
+                        </select>
+                        <button @click="drawingSort.desc = !drawingSort.desc" class="border rounded px-2 py-1 text-sm bg-white">
+                            {{ drawingSort.desc ? '降冪' : '升冪' }} <i class="fa-solid" :class="drawingSort.desc ? 'fa-arrow-down-wide-short' : 'fa-arrow-up-short-wide'"></i>
+                        </button>
+                        <select v-model.number="drawingPageSize" class="border rounded px-2 py-1 text-sm">
+                            <option :value="25">25 件</option><option :value="50">50 件</option><option :value="100">100 件</option>
+                        </select>
+                        <button @click="toast('批次操作：請先勾選圖面')" class="border border-envo text-envo rounded px-3 py-1 text-sm bg-white">批次操作</button>
+                        <button @click="openNewDrawing" class="bg-envo text-white rounded px-3 py-1 text-sm"><i class="fa-solid fa-plus mr-1"></i>新增圖面</button>
+                    </div>
+                </div>
+
+                <div v-if="drawingView === 'preview'" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                    <div v-for="d in pagedDrawings" :key="d.id" class="bg-white border rounded-lg overflow-hidden hover:shadow">
+                        <div class="h-28 bg-gray-50 border-b flex items-center justify-center relative">
+                            <svg viewBox="0 0 120 80" class="h-20 text-gray-400" fill="none" stroke="currentColor" stroke-width="1">
+                                <rect x="10" y="10" width="100" height="60"/><circle cx="40" cy="40" r="14"/><path d="M70 20h30v40H70z M10 40h16 M54 40h16"/>
+                            </svg>
+                            <span v-if="isNewDrawing(d)" class="absolute top-1 left-1 bg-red-500 text-white text-[10px] px-1.5 rounded">NEW</span>
+                        </div>
+                        <div class="p-2 text-xs space-y-0.5">
+                            <div v-for="it in drawingBasicVisible" :key="it.key" class="truncate">
+                                <span class="text-gray-400">{{ it.label }}：</span>{{ d[it.key] || '—' }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div v-else class="bg-white border rounded-lg overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-gray-50 text-gray-500 text-xs">
+                            <tr>
+                                <th v-for="it in drawingListColumns" :key="it.key" class="text-left px-3 py-2 whitespace-nowrap">{{ it.label }}</th>
+                                <th class="text-left px-3 py-2 whitespace-nowrap">最後更新</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="d in pagedDrawings" :key="d.id" class="border-t hover:bg-gray-50">
+                                <td v-for="it in drawingListColumns" :key="it.key" class="px-3 py-2 whitespace-nowrap">{{ d[it.key] || '—' }}</td>
+                                <td class="px-3 py-2 whitespace-nowrap text-gray-500">{{ fmtDate(d.updatedAt) }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div v-if="!filteredDrawings.length" class="text-center text-gray-400 py-12">沒有符合條件的圖面</div>
+            </div>
+        </section>
+
+        <!-- ===================== 專案列表 ===================== -->
+        <section v-if="page === 'projects'" class="p-4">
+            <div class="flex flex-wrap items-center gap-2 mb-3">
+                <h1 class="text-xl font-bold">專案列表</h1>
+                <div class="ml-auto flex gap-2">
+                    <button @click="toast('表單清單：尚未建立帳票範本')" class="border border-envo text-envo rounded px-3 py-1 text-sm bg-white">表單清單</button>
+                    <button @click="toast('新專案：請先補齊交易對象主檔與單位主控')" class="bg-envo text-white rounded px-3 py-1 text-sm"><i class="fa-solid fa-plus mr-1"></i>新專案</button>
+                </div>
+            </div>
+            <div class="bg-white border rounded-lg p-3 mb-3 flex flex-wrap gap-2 items-end text-sm">
+                <div><label class="block text-xs text-gray-500">客戶名稱</label>
+                    <select v-model="projectFilter.customer" class="border rounded px-2 py-1">
+                        <option value="">全部</option><option v-for="c in partners" :key="c.id">{{ c.name }}</option>
+                    </select></div>
+                <div><label class="block text-xs text-gray-500">專案名稱</label><input v-model="projectFilter.projectName" class="border rounded px-2 py-1"></div>
+                <div><label class="block text-xs text-gray-500">單位</label>
+                    <select v-model="projectFilter.unit" class="border rounded px-2 py-1">
+                        <option value="">全部</option><option v-for="u in units" :key="u.id">{{ u.name }}</option>
+                    </select></div>
+                <div><label class="block text-xs text-gray-500">詳細</label><input v-model="projectFilter.detail" placeholder="品名、圖號、備註…" class="border rounded px-2 py-1"></div>
+                <button @click="clearProjectFilters" class="text-envo hover:underline px-2 py-1">清除</button>
+            </div>
+
+            <div class="flex overflow-x-auto hide-scrollbar border-b border-gray-200 mb-3 bg-white rounded-t-lg">
+                <button @click="projectTab = -1" class="px-3 py-2 text-sm whitespace-nowrap border-b-2"
+                        :class="projectTab === -1 ? 'border-envo text-envo font-bold' : 'border-transparent text-gray-600'">
+                    全部 <span class="ml-1 text-xs bg-gray-100 rounded px-1.5">{{ filteredProjectsAll.length }}</span>
+                </button>
+                <button v-for="(s, i) in statuses" :key="s.zh" @click="projectTab = i" class="px-3 py-2 text-sm whitespace-nowrap border-b-2"
+                        :class="projectTab === i ? 'border-envo text-envo font-bold' : 'border-transparent text-gray-600'">
+                    {{ s.zh }} <span class="text-[10px] text-gray-400">{{ s.en }}</span>
+                    <span class="ml-1 text-xs bg-gray-100 rounded px-1.5">{{ countByStatus(i) }}</span>
+                </button>
+            </div>
+
+            <div class="bg-white border rounded-lg overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="bg-gray-50 text-gray-500 text-xs">
+                        <tr><th v-for="c in projectColumns" :key="c.key" class="text-left px-3 py-2 whitespace-nowrap">{{ c.label }}</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="p in tabProjects" :key="p.id" class="border-t" :style="{ backgroundColor: rowColor(p) || '' }">
+                            <td v-for="c in projectColumns" :key="c.key" class="px-3 py-2 whitespace-nowrap">
+                                <template v-if="c.key === 'status'">
+                                    <span class="text-xs bg-envo-light text-envo rounded px-2 py-0.5">{{ statuses[p.status].zh }}</span>
+                                </template>
+                                <template v-else-if="c.key === 'preview'">
+                                    <i class="fa-regular fa-file-image text-gray-400"></i>
+                                </template>
+                                <template v-else>{{ p[c.key] ?? '—' }}</template>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                <div v-if="!tabProjects.length" class="text-center text-gray-400 py-12 text-sm">此狀態沒有案件</div>
+            </div>
+            <p class="text-xs text-gray-400 mt-2">
+                欄位依「專案項目設定」與「各狀態的設定 › 設定使用項目」顯示；列底色依「依日期欄位設定顏色」規則。
+            </p>
+        </section>
+
+        <!-- ===================== 說明 ===================== -->
+        <section v-if="page === 'help'" class="p-4 max-w-5xl mx-auto">
+            <h1 class="text-xl font-bold mb-3">說明</h1>
+            <div class="relative mb-4">
+                <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                <input v-model="helpSearch" placeholder="搜尋說明與操作手冊" class="w-full pl-9 pr-3 py-2 border rounded-lg focus:outline-none focus:border-envo">
+            </div>
+            <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div v-for="c in filteredHelp" :key="c.title" class="bg-white border rounded-lg p-4">
+                    <div class="w-9 h-9 rounded bg-envo-light text-envo flex items-center justify-center mb-2"><i :class="c.icon"></i></div>
+                    <div class="font-bold mb-1">{{ c.title }}</div>
+                    <ul class="text-xs text-gray-500 space-y-0.5"><li v-for="a in c.articles" :key="a">・{{ a }}</li></ul>
+                </div>
+            </div>
+            <div v-if="!filteredHelp.length" class="text-center text-gray-400 py-12">找不到相關說明</div>
+        </section>
+
+        <!-- ===================== 設定 ===================== -->
+        <section v-if="page === 'settings'" class="flex flex-col md:flex-row">
+            <aside class="md:w-60 bg-white border-r border-gray-200 md:min-h-[calc(100vh-3.5rem)] p-3 shrink-0">
+                <button @click="settingPage = 'checklist'" class="w-full text-left px-3 py-2 rounded text-sm mb-2 flex items-center"
+                        :class="settingPage === 'checklist' ? 'bg-envo text-white' : 'bg-amber-50 text-amber-700'">
+                    <i class="fa-solid fa-list-check mr-2"></i>設定檢查清單
+                    <span class="ml-auto text-xs">{{ checklistDone }}/{{ checklist.length }}</span>
+                </button>
+                <div v-for="g in settingMenu" :key="g.group" class="mb-2">
+                    <div class="text-xs text-gray-400 px-3 py-1">{{ g.group }}</div>
+                    <button v-for="it in g.items" :key="it.id" @click="settingPage = it.id"
+                            class="w-full text-left px-3 py-1.5 rounded text-sm"
+                            :class="settingPage === it.id ? 'bg-envo-light text-envo font-bold' : 'text-gray-700 hover:bg-gray-100'">
+                        {{ it.label }}
+                    </button>
+                </div>
+            </aside>
+
+            <div class="flex-1 p-4 md:p-6 min-w-0">
+                <h1 class="text-xl font-bold mb-1">{{ currentSettingLabel }}</h1>
+                <p v-if="settingDesc[settingPage]" class="text-sm text-gray-500 mb-4">{{ settingDesc[settingPage] }}</p>
+
+                <!-- 設定檢查清單 -->
+                <div v-if="settingPage === 'checklist'" class="space-y-2 max-w-3xl">
+                    <div class="h-2 bg-gray-200 rounded overflow-hidden mb-3">
+                        <div class="h-full bg-envo transition-all" :style="{ width: (checklistDone / checklist.length * 100) + '%' }"></div>
+                    </div>
+                    <label v-for="(c, i) in checklist" :key="i" class="flex gap-3 bg-white border rounded-lg p-3 cursor-pointer"
+                           :class="c.done ? 'opacity-60' : ''">
+                        <input type="checkbox" v-model="c.done" class="accent-envo mt-1">
+                        <div class="flex-1">
+                            <div class="text-sm" :class="c.done ? 'line-through' : ''"><b>{{ i + 1 }}.</b> {{ c.text }}</div>
+                            <button v-if="c.link" @click.prevent="settingPage = c.link" class="text-xs text-envo hover:underline mt-1">前往設定 ›</button>
+                        </div>
+                    </label>
+                </div>
+
+                <!-- 我的帳戶 -->
+                <div v-if="settingPage === 'myAccount'" class="bg-white border rounded-lg p-4 max-w-xl space-y-3">
+                    <div><label class="text-xs text-gray-500">名稱</label><input v-model="me.name" class="w-full border rounded px-2 py-1.5"></div>
+                    <div><label class="text-xs text-gray-500">登入 Email</label><input v-model="me.email" class="w-full border rounded px-2 py-1.5"></div>
+                    <div><label class="text-xs text-gray-500">密碼</label>
+                        <div class="flex gap-2"><input type="password" value="********" disabled class="flex-1 border rounded px-2 py-1.5 bg-gray-50">
+                        <button @click="toast('已寄出密碼變更信')" class="border rounded px-3 text-sm">變更</button></div></div>
+                    <div class="flex flex-wrap gap-4 text-sm text-envo pt-2 border-t">
+                        <a href="#" @click.prevent="go('help')">說明</a><a href="#" @click.prevent>服務條款</a><a href="#" @click.prevent>隱私權政策</a>
+                        <button @click="toast('已登出（示範）')" class="ml-auto text-red-600"><i class="fa-solid fa-right-from-bracket mr-1"></i>登出</button>
+                    </div>
+                </div>
+
+                <!-- 帳戶管理 -->
+                <div v-if="settingPage === 'accounts'" class="space-y-4 max-w-4xl">
+                    <div class="bg-white border rounded-lg p-4 grid sm:grid-cols-2 gap-4 text-sm">
+                        <div class="flex items-center justify-between"><span>多重驗證</span>
+                            <label class="switch"><input type="checkbox" v-model="security.mfa"><span></span></label></div>
+                        <div class="flex items-center justify-between"><span>IP 位址限制</span>
+                            <select v-model="security.ipRestrict" class="border rounded px-2 py-1">
+                                <option value="none">不限制</option><option value="groups" :disabled="!ipGroups.length">僅允許可用IP位址群組</option>
+                            </select></div>
+                        <p v-if="security.ipRestrict === 'groups'" class="sm:col-span-2 text-xs text-red-600"><i class="fa-solid fa-triangle-exclamation mr-1"></i>請確認辦公室對外 IP 已列入「可用IP位址設定」，設錯會導致無人能登入。</p>
+                    </div>
+                    <div class="bg-white border rounded-lg overflow-x-auto">
+                        <div class="flex items-center px-4 py-2 border-b">
+                            <span class="font-bold text-sm">帳號（{{ accounts.length }}）</span>
+                            <button @click="inviteAccount" class="ml-auto bg-envo text-white rounded px-3 py-1 text-sm"><i class="fa-solid fa-user-plus mr-1"></i>邀請</button>
+                        </div>
+                        <table class="w-full text-sm">
+                            <thead class="bg-gray-50 text-xs text-gray-500"><tr><th class="text-left px-4 py-2">名稱</th><th class="text-left px-4 py-2">Email</th><th class="text-left px-4 py-2">權限</th><th></th></tr></thead>
+                            <tbody>
+                                <tr v-for="a in accounts" :key="a.id" class="border-t">
+                                    <td class="px-4 py-2">{{ a.name }}</td>
+                                    <td class="px-4 py-2 text-gray-500">{{ a.email }}</td>
+                                    <td class="px-4 py-2"><select v-model="a.role" @change="toast('權限變更將於重新登入後生效')" class="border rounded px-2 py-1">
+                                        <option v-for="r in roles" :key="r">{{ r }}</option></select></td>
+                                    <td class="px-4 py-2 text-right"><button @click="removeAccount(a)" class="text-red-500 text-xs">刪除</button></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <p class="text-xs text-gray-400">權限變更於該帳號重新登入後生效。至少須保留一位管理員。</p>
+                </div>
+
+                <!-- 操作記錄 -->
+                <div v-if="settingPage === 'logs'" class="space-y-3 max-w-5xl">
+                    <div class="bg-white border rounded-lg p-3 flex flex-wrap gap-2 items-end text-sm">
+                        <div><label class="block text-xs text-gray-500">日期區間</label>
+                            <div class="flex items-center gap-1"><input type="date" v-model="logFilter.from" class="border rounded px-1 py-1"><span>~</span><input type="date" v-model="logFilter.to" class="border rounded px-1 py-1"></div></div>
+                        <div><label class="block text-xs text-gray-500">用戶 ID</label><select v-model="logFilter.user" class="border rounded px-2 py-1"><option value="">全部</option><option v-for="a in accounts" :key="a.id">{{ a.name }}</option></select></div>
+                        <div><label class="block text-xs text-gray-500">操作類型</label><select v-model="logFilter.op" class="border rounded px-2 py-1"><option value="">全部</option><option v-for="o in ['參考','新增','編輯','刪除','下載']" :key="o">{{ o }}</option></select></div>
+                    </div>
+                    <div class="bg-white border rounded-lg overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="bg-gray-50 text-xs text-gray-500"><tr><th class="text-left px-3 py-2">日期時間</th><th class="text-left px-3 py-2">用戶ID</th><th class="text-left px-3 py-2">畫面</th><th class="text-left px-3 py-2">目標</th><th class="text-left px-3 py-2">操作</th></tr></thead>
+                            <tbody>
+                                <tr v-for="l in filteredLogs" :key="l.id" class="border-t">
+                                    <td class="px-3 py-2 whitespace-nowrap">{{ fmtDateTime(l.at) }}</td><td class="px-3 py-2">{{ l.user }}</td><td class="px-3 py-2">{{ l.screen }}</td><td class="px-3 py-2 font-mono text-xs">{{ l.target }}</td><td class="px-3 py-2">{{ l.op }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <div v-if="!filteredLogs.length" class="text-center text-gray-400 py-8 text-sm">此區間無操作記錄</div>
+                    </div>
+                </div>
+
+                <!-- 圖面基本 / 詳細項目設定、相關資料設定（顯示／隱藏拖曳） -->
+                <div v-if="['drawingBasic','drawingDetail','relatedDocs'].includes(settingPage)" class="max-w-4xl">
+                    <div class="grid md:grid-cols-2 gap-4">
+                        <div v-for="col in ['visible','hidden']" :key="col" class="bg-white border rounded-lg drop-zone"
+                             @dragover.prevent="$event.currentTarget.classList.add('over')"
+                             @dragleave="$event.currentTarget.classList.remove('over')"
+                             @drop="onDrop($event, col)">
+                            <div class="px-4 py-2 border-b font-bold text-sm flex items-center">
+                                {{ col === 'visible' ? '顯示' : '隱藏' }}
+                                <span class="ml-2 text-xs text-gray-400">{{ dualLists[settingPage][col].length }}</span>
+                            </div>
+                            <ul class="p-2 space-y-1 min-h-[120px]">
+                                <li v-for="(it, idx) in dualLists[settingPage][col]" :key="it.key" draggable="true"
+                                    @dragstart="onDragStart($event, col, idx)" @dragend="$event.target.classList.remove('dragging')"
+                                    @dragover.prevent @drop.stop="onDrop($event, col, idx)"
+                                    class="drag-item flex items-center gap-2 border rounded px-2 py-1.5 text-sm bg-gray-50">
+                                    <i class="fa-solid fa-grip-vertical text-gray-300"></i>
+                                    <span class="flex-1">{{ it.label }}</span>
+                                    <span v-if="it.type" class="text-[10px] text-gray-400">{{ it.type }}</span>
+                                    <button v-if="settingPage !== 'relatedDocs'" @click="it.ai = !it.ai" class="text-[10px] rounded px-1.5 border"
+                                            :class="it.ai ? 'bg-purple-600 text-white border-purple-600' : 'text-gray-400'" title="交給 AI 填寫">AI</button>
+                                    <button @click="moveDual(col, idx)" class="text-gray-400 hover:text-envo" :title="col === 'visible' ? '移至隱藏' : '移至顯示'">
+                                        <i class="fa-solid" :class="col === 'visible' ? 'fa-arrow-right' : 'fa-arrow-left'"></i></button>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div v-if="settingPage !== 'drawingBasic'" class="mt-3 flex gap-2 text-sm">
+                        <input v-model="newItem.label" placeholder="新增項目名稱" class="border rounded px-2 py-1">
+                        <select v-if="settingPage === 'drawingDetail'" v-model="newItem.type" class="border rounded px-2 py-1">
+                            <option v-for="t in ['文字','數值','日期','選擇']" :key="t">{{ t }}</option>
+                        </select>
+                        <button @click="addDualItem" class="bg-envo text-white rounded px-3 py-1"><i class="fa-solid fa-plus mr-1"></i>新增項目</button>
+                    </div>
+                </div>
+
+                <!-- AI 提示詞設定 -->
+                <div v-if="settingPage === 'aiPrompt'" class="max-w-3xl space-y-4">
+                    <div class="bg-white border rounded-lg p-4">
+                        <div class="font-bold text-sm mb-2">共用提示詞</div>
+                        <div v-for="p in aiPrompts.common" :key="p.item" class="mb-3">
+                            <label class="text-xs text-gray-500">{{ p.item }}</label>
+                            <textarea v-model="p.prompt" rows="3" class="w-full border rounded px-2 py-1 text-sm"></textarea>
+                        </div>
+                        <div class="flex gap-2 text-sm">
+                            <select v-model="newPrompt.item" class="border rounded px-2 py-1">
+                                <option value="">選擇 AI 項目</option>
+                                <option v-for="it in aiItems" :key="it">{{ it }}</option>
+                            </select>
+                            <button @click="addCommonPrompt" class="border border-envo text-envo rounded px-3 py-1">新增共用提示詞</button>
+                        </div>
+                    </div>
+                    <div class="bg-white border rounded-lg p-4">
+                        <div class="font-bold text-sm mb-2">顧客別提示詞</div>
+                        <div v-for="(p, i) in aiPrompts.customer" :key="i" class="mb-3 border rounded p-2">
+                            <div class="flex text-xs text-gray-500 mb-1">{{ p.customer }} › {{ p.item }}<button @click="aiPrompts.customer.splice(i,1)" class="ml-auto text-red-500">刪除</button></div>
+                            <textarea v-model="p.prompt" rows="2" class="w-full border rounded px-2 py-1 text-sm"></textarea>
+                        </div>
+                        <div v-if="!aiPrompts.customer.length" class="text-sm text-gray-400 mb-2">尚無顧客別提示詞</div>
+                        <div class="flex flex-wrap gap-2 text-sm">
+                            <select v-model="newPrompt.customer" class="border rounded px-2 py-1"><option value="">選擇客戶</option><option v-for="c in partners" :key="c.id">{{ c.name }}</option></select>
+                            <select v-model="newPrompt.item" class="border rounded px-2 py-1"><option value="">選擇 AI 項目</option><option v-for="it in aiItems" :key="it">{{ it }}</option></select>
+                            <button @click="addCustomerPrompt" class="border border-envo text-envo rounded px-3 py-1">新增顧客別提示詞</button>
+                        </div>
+                    </div>
+                    <p class="text-xs text-gray-400">提示詞不影響設定前已建立的圖面。圖號規則參考：EG2601F-MS10-03-xxx，拆分圖用 (1/2)、(2/2)。</p>
+                </div>
+
+                <!-- Excel 範本設定 -->
+                <div v-if="settingPage === 'excelTemplate'" class="max-w-3xl">
+                    <div class="flex overflow-x-auto hide-scrollbar border-b mb-3">
+                        <button v-for="t in excelTabs" :key="t" @click="excelTab = t" class="px-3 py-2 text-sm whitespace-nowrap border-b-2"
+                                :class="excelTab === t ? 'border-envo text-envo font-bold' : 'border-transparent text-gray-600'">{{ t }}</button>
+                    </div>
+                    <div class="bg-white border rounded-lg p-4">
+                        <div v-for="(f, i) in excelTemplates[excelTab]" :key="i" class="flex items-center gap-2 border rounded px-3 py-2 mb-2 text-sm">
+                            <i class="fa-regular fa-file-excel text-green-600"></i>{{ f }}
+                            <button @click="excelTemplates[excelTab].splice(i,1)" class="ml-auto text-red-500 text-xs">刪除</button>
+                        </div>
+                        <div v-if="!excelTemplates[excelTab].length" class="text-sm text-gray-400 mb-3">尚無範本</div>
+                        <label class="inline-block bg-envo text-white rounded px-3 py-1 text-sm cursor-pointer">
+                            <i class="fa-solid fa-upload mr-1"></i>上傳 Excel 範本
+                            <input type="file" accept=".xlsx,.xls" class="hidden" @change="uploadExcel">
+                        </label>
+                        <p class="text-xs text-gray-400 mt-2">上傳後可從相關資料頁建立文件，並可設定圖面／案件資訊自動填入指定儲存格。</p>
+                    </div>
+                </div>
+
+                <!-- 印章設定 -->
+                <div v-if="settingPage === 'stamps'" class="max-w-3xl bg-white border rounded-lg p-4">
+                    <div class="grid grid-cols-3 sm:grid-cols-5 gap-3 mb-3">
+                        <div v-for="(s, i) in stamps" :key="i" class="border rounded p-2 text-center text-xs">
+                            <div class="w-14 h-14 mx-auto rounded-full border-2 border-red-500 text-red-500 flex items-center justify-center font-bold">{{ s.slice(0,2) }}</div>
+                            <div class="mt-1 truncate">{{ s }}</div>
+                            <button @click="stamps.splice(i,1)" class="text-red-500">刪除</button>
+                        </div>
+                    </div>
+                    <div v-if="!stamps.length" class="text-sm text-gray-400 mb-3">無資料</div>
+                    <div class="flex gap-2 text-sm"><input v-model="newStamp" placeholder="印章名稱（例：檢驗、核准）" class="border rounded px-2 py-1">
+                        <button @click="addStamp" class="bg-envo text-white rounded px-3 py-1">新增</button></div>
+                </div>
+
+                <!-- 單一開關頁 -->
+                <div v-if="toggleSettings[settingPage]" class="max-w-xl bg-white border rounded-lg p-4 flex items-center justify-between gap-4">
+                    <div>
+                        <div class="font-bold text-sm">{{ toggleSettings[settingPage].label }}</div>
+                        <div class="text-xs text-gray-500">{{ toggleSettings[settingPage].hint }}</div>
+                    </div>
+                    <label class="switch"><input type="checkbox" v-model="toggles[settingPage]"><span></span></label>
+                </div>
+
+                <!-- 專案項目設定 -->
+                <div v-if="settingPage === 'projectItems'" class="max-w-4xl">
+                    <div class="grid md:grid-cols-2 gap-4">
+                        <div v-for="col in ['visible','hidden']" :key="col" class="bg-white border rounded-lg drop-zone"
+                             @dragover.prevent="$event.currentTarget.classList.add('over')"
+                             @dragleave="$event.currentTarget.classList.remove('over')"
+                             @drop="onDrop($event, col)">
+                            <div class="px-4 py-2 border-b font-bold text-sm">{{ col === 'visible' ? '使用項目' : '不使用項目' }}
+                                <span class="ml-2 text-xs text-gray-400">{{ dualLists.projectItems[col].length }}</span></div>
+                            <ul class="p-2 space-y-1 min-h-[120px] max-h-[60vh] overflow-y-auto">
+                                <li v-for="(it, idx) in dualLists.projectItems[col]" :key="it.key" draggable="true"
+                                    @dragstart="onDragStart($event, col, idx)" @dragend="$event.target.classList.remove('dragging')"
+                                    @dragover.prevent @drop.stop="onDrop($event, col, idx)"
+                                    class="drag-item flex items-center gap-2 border rounded px-2 py-1.5 text-sm bg-gray-50">
+                                    <i class="fa-solid fa-grip-vertical text-gray-300"></i>
+                                    <span class="flex-1">{{ it.label }}</span>
+                                    <span v-if="it.locked" class="text-[10px] text-gray-400"><i class="fa-solid fa-lock"></i></span>
+                                    <span v-if="it.type" class="text-[10px] text-gray-400">{{ it.type }}</span>
+                                    <button @click="moveDual(col, idx)" class="text-gray-400 hover:text-envo"><i class="fa-solid" :class="col === 'visible' ? 'fa-arrow-right' : 'fa-arrow-left'"></i></button>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="mt-3 flex flex-wrap gap-2 text-sm">
+                        <input v-model="newItem.label" placeholder="新增項目名稱" class="border rounded px-2 py-1">
+                        <select v-model="newItem.type" class="border rounded px-2 py-1"><option v-for="t in ['文字','數值','日期','長文','選擇']" :key="t">{{ t }}</option></select>
+                        <button @click="addDualItem" class="bg-envo text-white rounded px-3 py-1"><i class="fa-solid fa-plus mr-1"></i>新增項目</button>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-2">順序反映在案件一覽（全部）與案件詳細；「狀態」項目不能移到不使用區。</p>
+                </div>
+
+                <!-- 各狀態的設定 -->
+                <div v-if="settingPage === 'statusSettings'">
+                    <div class="flex border-b mb-3">
+                        <button v-for="t in ['顯示設定','設定使用項目','依日期欄位設定顏色']" :key="t" @click="statusTab = t" class="px-3 py-2 text-sm whitespace-nowrap border-b-2"
+                                :class="statusTab === t ? 'border-envo text-envo font-bold' : 'border-transparent text-gray-600'">{{ t }}</button>
+                    </div>
+
+                    <div v-if="statusTab === '顯示設定'" class="bg-white border rounded-lg max-w-2xl">
+                        <div v-for="(s, i) in statuses" :key="s.zh" class="flex items-center px-4 py-2 border-b last:border-0 text-sm">
+                            <span class="flex-1">{{ s.zh }} <span class="text-xs text-gray-400">{{ s.en }}</span></span>
+                            <select v-model="statusDisplay[i]" class="border rounded px-2 py-1">
+                                <option value="case">依案件顯示</option>
+                                <option value="group" :disabled="!toggles.caseGroup">以案件群組彙整顯示</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div v-if="statusTab === '設定使用項目'" class="bg-white border rounded-lg overflow-x-auto">
+                        <table class="text-xs">
+                            <thead class="bg-gray-50">
+                                <tr><th class="sticky-col bg-gray-50 text-left px-3 py-2 whitespace-nowrap">項目＼狀態</th>
+                                    <th v-for="s in statuses" :key="s.zh" class="px-2 py-2 whitespace-nowrap font-normal">{{ s.zh }}</th></tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="it in projectUsedNonStatus" :key="it.key" class="border-t bg-white">
+                                    <td class="sticky-col bg-white px-3 py-1.5 whitespace-nowrap">{{ it.label }}</td>
+                                    <td v-for="(s, i) in statuses" :key="s.zh" class="text-center px-2">
+                                        <input type="checkbox" class="accent-envo" :checked="statusUsage[it.key] && statusUsage[it.key][i]" @change="toggleUsage(it.key, i, $event.target.checked)">
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <p class="text-xs text-amber-600 p-3"><i class="fa-solid fa-circle-info mr-1"></i>初始值為截圖判讀結果，請與實際系統核對。只列出「專案項目設定」中的使用項目。</p>
+                    </div>
+
+                    <div v-if="statusTab === '依日期欄位設定顏色'" class="max-w-3xl space-y-2">
+                        <div v-for="(r, i) in colorRules" :key="i" class="bg-white border rounded-lg p-3 text-sm flex flex-wrap items-center gap-2">
+                            <span class="text-xs text-gray-400 w-6">#{{ i + 1 }}</span>
+                            <select v-model="r.field" class="border rounded px-2 py-1"><option v-for="f in dateFields" :key="f.key" :value="f.key">{{ f.label }}</option></select>
+                            <select v-model="r.cond" class="border rounded px-2 py-1">
+                                <option value="after">當日之後</option><option value="today">當日</option>
+                                <option value="within">當日前 N 日內</option>
+                            </select>
+                            <input v-if="r.cond === 'within'" type="number" v-model.number="r.days" min="1" class="border rounded px-2 py-1 w-16">
+                            <span>→</span>
+                            <input type="color" v-model="r.color" class="w-8 h-8 border rounded">
+                            <div class="w-full flex flex-wrap gap-1 mt-1">
+                                <label v-for="(s, si) in statuses" :key="s.zh" class="text-xs border rounded px-1.5 py-0.5 cursor-pointer" :class="r.statuses.includes(si) ? 'bg-envo-light border-envo text-envo' : 'text-gray-500'">
+                                    <input type="checkbox" class="hidden" :value="si" v-model="r.statuses">{{ s.zh }}
+                                </label>
+                            </div>
+                            <div class="w-full flex gap-2 text-xs">
+                                <button @click="moveRule(i, -1)" :disabled="i === 0" class="text-gray-500 disabled:opacity-30">上移</button>
+                                <button @click="moveRule(i, 1)" :disabled="i === colorRules.length - 1" class="text-gray-500 disabled:opacity-30">下移</button>
+                                <button @click="colorRules.splice(i,1)" class="text-red-500 ml-auto">刪除</button>
+                            </div>
+                        </div>
+                        <button @click="colorRules.push({ field: 'dueDate', cond: 'within', days: 7, color: '#fff3c4', statuses: [] })" class="border border-envo text-envo rounded px-3 py-1 text-sm bg-white"><i class="fa-solid fa-plus mr-1"></i>新增規則</button>
+                        <p class="text-xs text-gray-400">以目標項目日期為基準自動著色案件列；條件重疊時上方規則優先。</p>
+                    </div>
+                </div>
+
+                <!-- 報價單／交貨單／發票設定 -->
+                <div v-if="docSettings[settingPage]" class="max-w-3xl space-y-4">
+                    <div v-if="settingPage === 'quoteSettings'" class="flex border-b">
+                        <button v-for="t in ['標準報價單','Excel 報價單']" :key="t" @click="quoteTab = t" class="px-3 py-2 text-sm border-b-2"
+                                :class="quoteTab === t ? 'border-envo text-envo font-bold' : 'border-transparent text-gray-600'">{{ t }}</button>
+                    </div>
+                    <div class="bg-white border rounded-lg p-4">
+                        <div class="font-bold text-sm mb-2">明細項目模式</div>
+                        <div v-for="(m, i) in docSettings[settingPage].modes" :key="i" class="flex items-center gap-2 border rounded px-3 py-2 mb-1 text-sm">
+                            <span class="flex-1">{{ m.name }}</span><span class="text-xs text-gray-400">{{ m.cols }}</span>
+                            <span v-if="i === 0" class="text-[10px] bg-gray-100 rounded px-1.5">預設</span>
+                        </div>
+                        <button @click="addDocMode" class="text-envo text-sm mt-1"><i class="fa-solid fa-plus mr-1"></i>新增模式</button>
+                    </div>
+                    <div class="bg-white border rounded-lg p-4">
+                        <div class="font-bold text-sm mb-2">帳票範本（格式與公司資訊）</div>
+                        <div v-for="(t, i) in docSettings[settingPage].templates" :key="i" class="flex items-center gap-2 border rounded px-3 py-2 mb-1 text-sm">
+                            <i class="fa-regular fa-file-lines text-envo"></i><span class="flex-1">{{ t }}</span>
+                            <button @click="docSettings[settingPage].templates.splice(i,1)" class="text-red-500 text-xs">刪除</button>
+                        </div>
+                        <div v-if="!docSettings[settingPage].templates.length" class="text-sm text-gray-400 mb-2">尚未建立帳票範本</div>
+                        <button @click="addDocTemplate" class="bg-envo text-white rounded px-3 py-1 text-sm"><i class="fa-solid fa-plus mr-1"></i>建立帳票範本</button>
+                        <p v-if="companyIncomplete" class="text-xs text-amber-600 mt-2"><i class="fa-solid fa-triangle-exclamation mr-1"></i>公司資訊尚未完整（仍有範例預設值或空白），帳票會帶入錯誤資料。</p>
+                    </div>
+                </div>
+
+                <!-- 交易對象主檔／單位主控 -->
+                <div v-if="settingPage === 'partners' || settingPage === 'units'" class="max-w-2xl">
+                    <div class="bg-white border rounded-lg">
+                        <ul class="p-2 space-y-1 min-h-[80px]">
+                            <li v-for="(it, idx) in masterList" :key="it.id" draggable="true"
+                                @dragstart="masterDrag = idx" @dragover.prevent @drop="dropMaster(idx)"
+                                class="drag-item flex items-center gap-2 border rounded px-2 py-1.5 text-sm bg-gray-50">
+                                <i class="fa-solid fa-grip-vertical text-gray-300"></i>
+                                <input v-model="it.name" class="flex-1 bg-transparent focus:outline-none focus:bg-white px-1">
+                                <span v-if="settingPage === 'partners'" class="text-xs text-gray-400">{{ it.kind }}</span>
+                                <label v-if="settingPage === 'partners'" class="text-xs flex items-center gap-1"><input type="radio" name="defaultPartner" :checked="it.isDefault" @change="setDefaultPartner(it)" class="accent-envo">初始值</label>
+                                <button @click="masterList.splice(idx,1)" class="text-red-500 text-xs">刪除</button>
+                            </li>
+                        </ul>
+                        <div v-if="!masterList.length" class="text-sm text-gray-400 px-4 pb-4">現況為空</div>
+                        <div class="border-t p-3 flex gap-2 text-sm">
+                            <input v-model="newMaster.name" :placeholder="settingPage === 'partners' ? '客戶／廠商名稱' : '單位（例：PCS、SET、KG）'" class="border rounded px-2 py-1 flex-1">
+                            <select v-if="settingPage === 'partners'" v-model="newMaster.kind" class="border rounded px-2 py-1"><option>客戶</option><option>廠商</option></select>
+                            <button @click="addMaster" class="bg-envo text-white rounded px-3 py-1">新增</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 權限管理 -->
+                <div v-if="settingPage === 'permissions'">
+                    <div class="flex overflow-x-auto hide-scrollbar border-b mb-3">
+                        <button v-for="t in permTabs" :key="t" @click="permTab = t" class="px-3 py-2 text-sm whitespace-nowrap border-b-2"
+                                :class="permTab === t ? 'border-envo text-envo font-bold' : 'border-transparent text-gray-600'">{{ t }}</button>
+                    </div>
+                    <div class="bg-white border rounded-lg overflow-x-auto">
+                        <table class="text-sm w-full">
+                            <thead class="bg-gray-50 text-xs text-gray-500">
+                                <tr><th class="sticky-col bg-gray-50 text-left px-3 py-2">對象</th>
+                                    <th v-for="r in roles" :key="r" class="px-3 py-2 whitespace-nowrap">{{ r }}
+                                        <button v-if="r !== '管理員'" @click="permEditRole = permEditRole === r ? '' : r" class="ml-1 text-envo text-[10px] underline">{{ permEditRole === r ? '完成' : '權限編輯' }}</button></th></tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="row in permRows" :key="row.key" class="border-t bg-white">
+                                    <td class="sticky-col bg-white px-3 py-2 whitespace-nowrap">{{ row.label }}</td>
+                                    <td v-for="r in roles" :key="r" class="px-3 py-2 whitespace-nowrap">
+                                        <template v-if="r === '管理員'"><span class="text-xs text-gray-400">全部（固定）</span></template>
+                                        <template v-else-if="permEditRole === r">
+                                            <label v-for="op in row.ops" :key="op" class="mr-2 text-xs"><input type="checkbox" class="accent-envo" :checked="hasPerm(r, row.key, op)" @change="setPerm(r, row.key, op, $event.target.checked)"> {{ op }}</label>
+                                        </template>
+                                        <template v-else><span class="text-xs">{{ permText(r, row.key) }}</span></template>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="mt-3 space-y-1">
+                        <div v-for="w in permWarnings" :key="w" class="text-xs text-red-600"><i class="fa-solid fa-triangle-exclamation mr-1"></i>{{ w }}</div>
+                        <p class="text-xs text-gray-400">連動規則：缺少報價相關欄位編輯權限→無法製作報價單；缺少交貨相關欄位編輯權限→無法建立交貨單；缺少請款相關欄位編輯權限→無法建立發票。</p>
+                    </div>
+                </div>
+
+                <!-- 可用IP位址設定 -->
+                <div v-if="settingPage === 'ipSettings'" class="max-w-3xl space-y-3">
+                    <div class="bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded p-3">
+                        <i class="fa-solid fa-triangle-exclamation mr-1"></i>設定前請先確認辦公室對外 IP 是否固定；設錯會導致無人能登入。目前IP：<b class="font-mono">{{ currentIp }}</b>
+                    </div>
+                    <div v-for="(g, i) in ipGroups" :key="i" class="bg-white border rounded-lg p-3 text-sm space-y-2">
+                        <div class="flex gap-2"><input v-model="g.name" placeholder="名稱" class="border rounded px-2 py-1 flex-1">
+                            <button @click="ipGroups.splice(i,1)" class="text-red-500 text-xs">刪除群組</button></div>
+                        <div v-for="(ip, j) in g.ips" :key="j" class="flex gap-2 items-center">
+                            <input v-model="g.ips[j]" placeholder="單一 IP 或 CIDR（例 203.0.113.0/24）" class="border rounded px-2 py-1 flex-1 font-mono"
+                                   :class="ip && !validIp(ip) ? 'border-red-400' : ''">
+                            <button @click="g.ips.splice(j,1)" class="text-gray-400"><i class="fa-solid fa-xmark"></i></button>
+                        </div>
+                        <button @click="g.ips.push('')" class="text-envo text-xs"><i class="fa-solid fa-plus mr-1"></i>新增 IP</button>
+                    </div>
+                    <div v-if="!ipGroups.length" class="text-sm text-gray-400">尚未建立</div>
+                    <button @click="ipGroups.push({ name: '', ips: [currentIp] })" class="bg-envo text-white rounded px-3 py-1 text-sm"><i class="fa-solid fa-plus mr-1"></i>新增 IP 群組</button>
+                    <p v-if="ipGroups.length && !ipCoversCurrent" class="text-xs text-red-600">目前IP不在任何群組內，啟用限制後您將無法登入。</p>
+                </div>
+
+                <!-- 通知設定 -->
+                <div v-if="settingPage === 'notifications'">
+                    <div class="flex border-b mb-3">
+                        <button v-for="t in ['上傳檔案','案件狀態的輸入・變更']" :key="t" @click="notifyTab = t" class="px-3 py-2 text-sm whitespace-nowrap border-b-2"
+                                :class="notifyTab === t ? 'border-envo text-envo font-bold' : 'border-transparent text-gray-600'">{{ t }}</button>
+                    </div>
+                    <div class="bg-white border rounded-lg overflow-x-auto">
+                        <table class="text-xs">
+                            <thead class="bg-gray-50"><tr><th class="sticky-col bg-gray-50 text-left px-3 py-2">帳號</th>
+                                <th v-for="c in notifyCols" :key="c" class="px-2 py-2 whitespace-nowrap font-normal">{{ c }}</th></tr></thead>
+                            <tbody>
+                                <tr v-for="a in accounts" :key="a.id" class="border-t bg-white">
+                                    <td class="sticky-col bg-white px-3 py-2 whitespace-nowrap">{{ a.name }}</td>
+                                    <td v-for="c in notifyCols" :key="c" class="px-2 py-2 text-center">
+                                        <label class="switch" style="transform: scale(.8)"><input type="checkbox" :checked="getNotify(a.id, c)" @change="setNotify(a.id, c, $event.target.checked)"><span></span></label>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-2">以 Email 通知。該資料或狀態權限為「不可檢視」的帳號不會收到通知。目前開啟 {{ notifyOnCount }} 項。</p>
+                </div>
+
+                <!-- 公司資訊 -->
+                <div v-if="settingPage === 'company'" class="max-w-2xl bg-white border rounded-lg p-4 space-y-3">
+                    <div v-for="f in companyFields" :key="f.key">
+                        <label class="text-xs text-gray-500 flex items-center gap-2">{{ f.label }}
+                            <span v-if="companyFieldIssue(f.key)" class="text-amber-600"><i class="fa-solid fa-triangle-exclamation"></i> {{ companyFieldIssue(f.key) }}</span></label>
+                        <input v-model="company[f.key]" class="w-full border rounded px-2 py-1.5" :class="companyFieldIssue(f.key) ? 'border-amber-400 bg-amber-50' : ''">
+                    </div>
+                    <div class="grid sm:grid-cols-2 gap-3 pt-2 border-t">
+                        <div v-for="img in [{ key: 'logo', label: '標誌', hint: '建議 高100×寬520px、1MB 以下', cls: 'h-12 w-full' }, { key: 'seal', label: '印鑑', hint: '建議 160×160px', cls: 'h-20 w-20' }]" :key="img.key">
+                            <div class="text-xs text-gray-500">{{ img.label }} <span class="text-gray-400">（{{ img.hint }}）</span></div>
+                            <div class="border rounded bg-gray-50 flex items-center justify-center my-1" :class="img.cls">
+                                <img v-if="company[img.key]" :src="company[img.key]" class="max-h-full max-w-full">
+                                <span v-else class="text-xs text-gray-400">未上傳</span>
+                            </div>
+                            <label class="text-xs text-envo cursor-pointer">上傳<input type="file" accept="image/*" class="hidden" @change="uploadImage($event, img.key)"></label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 語言與時區 -->
+                <div v-if="settingPage === 'locale'" class="max-w-2xl space-y-4">
+                    <div v-for="blk in [{ title: '此帳號', obj: locale.mine }, { title: '新邀請帳號的預設值', obj: locale.defaults }]" :key="blk.title" class="bg-white border rounded-lg p-4 grid sm:grid-cols-3 gap-3 text-sm">
+                        <div class="sm:col-span-3 font-bold">{{ blk.title }}</div>
+                        <div><label class="text-xs text-gray-500">語言</label><select v-model="blk.obj.lang" class="w-full border rounded px-2 py-1"><option>中文（繁體）</option><option>English</option><option>日本語</option></select></div>
+                        <div><label class="text-xs text-gray-500">時區</label><select v-model="blk.obj.tz" class="w-full border rounded px-2 py-1"><option>Asia/Taipei</option><option>Asia/Tokyo</option><option>UTC</option></select></div>
+                        <div><label class="text-xs text-gray-500">日期格式</label><select v-model="blk.obj.fmt" class="w-full border rounded px-2 py-1"><option>yyyy/mm/dd</option><option>yyyy-mm-dd</option><option>dd/mm/yyyy</option></select></div>
+                    </div>
+                    <p class="text-xs text-gray-400">重新登入後生效。</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 新增圖面 -->
+    <div v-if="newDrawing" class="fixed inset-0 bg-black/40 z-40 flex items-center justify-center p-4" @click.self="newDrawing = null">
+        <div class="bg-white rounded-lg w-full max-w-md p-4 space-y-2">
+            <div class="font-bold">新增圖面</div>
+            <div v-for="f in drawingFilterFields" :key="f.key">
+                <label class="text-xs text-gray-500">{{ f.label }}</label>
+                <input v-model="newDrawing[f.key]" class="w-full border rounded px-2 py-1 text-sm">
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button @click="newDrawing = null" class="border rounded px-3 py-1 text-sm">取消</button>
+                <button @click="saveNewDrawing" class="bg-envo text-white rounded px-3 py-1 text-sm">登錄</button>
+            </div>
+            <p v-if="toggles.continuousEntry" class="text-xs text-gray-400">已啟用連續輸入：登錄後將保留表單以繼續輸入下一張。</p>
+        </div>
+    </div>
+
+    <transition name="toast">
+        <div v-if="toastMsg" class="fixed top-16 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-sm rounded px-4 py-2 z-50 shadow">{{ toastMsg }}</div>
+    </transition>
+</div>
+
+<script>
+    const { createApp, ref, reactive, computed, watch } = Vue;
+
+    const STORAGE_KEY = 'envoGreenSettings_v1';
+    const DAY = 86400000;
+    const TODAY = new Date(); TODAY.setHours(0, 0, 0, 0);
+    const daysAgo = n => new Date(TODAY.getTime() - n * DAY).toISOString();
+    const daysLater = n => new Date(TODAY.getTime() + n * DAY).toISOString().slice(0, 10);
+
+    // 13 個狀態
+    const STATUSES = [
+        { zh: '估價中', en: 'Budgeting' }, { zh: '報價單', en: 'Quotation' }, { zh: 'PO/訂購單', en: 'PO' },
+        { zh: '開工命令單', en: 'Fab Order' }, { zh: '採購', en: 'Procurement' }, { zh: '冷作組立', en: 'Fit up' },
+        { zh: '電銲', en: 'Welding' }, { zh: '機械加工', en: 'Machining' }, { zh: '塗裝', en: 'Coating' },
+        { zh: '組裝', en: 'Assembly' }, { zh: '包裝', en: 'Packing' }, { zh: '交貨', en: 'Delivery' },
+        { zh: '結辦請款', en: 'Invoice' },
+    ];
+    const range = (a, b) => STATUSES.map((_, i) => i >= a && i <= b);
+    const only = (...idx) => STATUSES.map((_, i) => idx.includes(i));
+    const ALL = range(0, 12), NONE = only();
+
+    const it = (key, label, type = '', ai = false) => ({ key, label, type, ai });
+
+    function defaultState() {
+        return {
+            dualLists: {
+                drawingBasic: {
+                    visible: [it('customer', '客戶名稱'), it('drawingNo', '圖號'), it('name', '品名', '', true)],
+                    hidden: [it('category', '分類', '選擇'), it('client', '客戶Client')],
+                },
+                drawingDetail: {
+                    visible: [it('caseNo', '工程案號', '文字', true), it('material', '材質', '文字', true), it('heat', '熱處理', '文字', true)],
+                    hidden: [
+                        ...['加工方式', '機械', '外包商', '加工負責人', '生產據點', '製造編號', '形狀', '工具', '加工治具', '處理'].map((l, i) => it('dt' + i, l, '文字')),
+                        it('dtDelivery', '交貨日期', '日期'),
+                        ...['庫存', '高度', '寬度', '厚度', '外徑', '內徑', '總長', '重量'].map((l, i) => it('dn' + i, l, '數值')),
+                    ],
+                },
+                relatedDocs: {
+                    visible: ['報價單', '訂單', '工序單', '檢驗報告', '不良品管理表', '產品樣本'].map((l, i) => it('rv' + i, l)),
+                    hidden: ['詢價單', '訂單確認書', '外包單', '材料訂單', '外包報價單', '請款單', '交貨單', 'QC工程表', '生產日報', '鋼材檢驗證明', 'CAD', '程式', '作業示範', 'Email', '包裝規格書', '自訂1', '自訂2'].map((l, i) => it('rh' + i, l)),
+                },
+                projectItems: {
+                    visible: [
+                        it('customer', '客戶名稱'), it('caseNo', '工程案號'), it('projectName', '專案名稱'), it('quoteNo', '報價單號'),
+                        it('orderNo', '訂單號碼'), it('unit', '單位'), it('drawingNo', '圖號'), it('preview', '圖面預覽'),
+                        it('name', '品名'), it('material', '材質'), it('qty', '製造數量', '數值'), it('subcon', '外包商'),
+                        it('site', '生產據點'), it('method', '加工方式'), { ...it('status', '狀態'), locked: true },
+                        it('dueDate', '交期', '日期'), it('deliveryDate', '交貨日期', '日期'), it('deliveryQty', '交貨數量', '數值'),
+                        it('invoiced', '開立發票'), it('billingDate', '請款日期', '日期'), it('note', '備註', '長文'),
+                    ],
+                    hidden: [
+                        ...['交貨編號', '交貨單價', '交貨備註', '交付內部註解', '請款單價', '請款數量', '請款編號', '請款備註', '報價內部備忘錄', '請款內部備忘錄',
+                            '分類', '機械', '加工負責人', '製造編號', '形狀', '處理', '工具', '加工治具', '庫存', '高度', '寬度', '厚度', '外徑', '內徑', '總長', '重量', '熱處理']
+                            .map((l, i) => it('ph' + i, l)),
+                    ],
+                },
+            },
+            // 截圖判讀的各狀態使用項目
+            statusUsage: {
+                customer: ALL, projectName: ALL, unit: ALL, name: ALL, qty: ALL, note: ALL,
+                caseNo: range(2, 12), quoteNo: only(1), orderNo: only(2, 3, 10, 11, 12), subcon: NONE,
+                site: range(4, 9), method: range(4, 9), dueDate: range(2, 11), deliveryDate: range(2, 11),
+                deliveryQty: range(3, 12), invoiced: only(12), billingDate: only(12),
+                drawingNo: range(0, 11), preview: range(0, 11), material: range(0, 11),
+            },
+            statusDisplay: STATUSES.map(() => 'case'),
+            colorRules: [{ field: 'dueDate', cond: 'after', days: 0, color: '#fde2e7', statuses: [2, 3] }],
+            toggles: { assembly: false, continuousEntry: false, caseGroup: false },
+            aiPrompts: { common: [{ item: '品名', prompt: '依圖面標題欄的品名填寫，保留原文用語；若為拆分圖，品名不加 (1/2)、(2/2)。' }], customer: [] },
+            excelTemplates: { 報價單: [], 訂單: [], 工序單: [], 檢驗報告: [], 不良品管理表: [], 產品樣本: [] },
+            stamps: [],
+            docSettings: {
+                quoteSettings: { modes: [{ name: '預設', cols: '圖號・品名' }], templates: [] },
+                deliverySettings: { modes: [{ name: '預設', cols: '圖號・品名' }], templates: [] },
+                invoiceSettings: { modes: [{ name: '預設', cols: '交貨日期・圖號・品名' }], templates: [] },
+            },
+            partners: [{ id: 1, name: 'TEST', kind: '客戶', isDefault: false }, { id: 2, name: 'CSBC高雄', kind: '客戶', isDefault: false }],
+            units: [],
+            accounts: [
+                { id: 1, name: '劉雅昀', email: 'liu@example.com', role: '管理員' },
+                { id: 2, name: 'EGH', email: 'egh@example.com', role: '管理員' },
+            ],
+            me: { name: '劉雅昀', email: 'liu@example.com' },
+            security: { mfa: false, ipRestrict: 'none' },
+            ipGroups: [],
+            notify: {},
+            perms: null,
+            company: {
+                name: '環菱重工股份有限公司', zip: '100-0001', addr1: '高雄市', addr2: '千代田区千代田1-1', tel: '07-000-0000',
+                fax: '03-0000-0000', email: 'info@example.co.jp', taxId: '', logo: '', seal: '',
+            },
+            locale: {
+                mine: { lang: '中文（繁體）', tz: 'Asia/Taipei', fmt: 'yyyy/mm/dd' },
+                defaults: { lang: '中文（繁體）', tz: 'Asia/Taipei', fmt: 'yyyy/mm/dd' },
+            },
+            checklist: [
+                { text: '公司資訊：更正郵遞區號、地址2、傳真、Email，補統一編號，上傳標誌與印鑑。', link: 'company' },
+                { text: '建立帳票範本（報價單、交貨單、發票），視需要建立 Excel 範本。', link: 'quoteSettings' },
+                { text: '補齊單位主控與交易對象主檔（報價單與單位欄位依賴這些資料）。', link: 'units' },
+                { text: '規劃一般1～3 權限：誰能看報價單價、誰能下載圖面（機密）。', link: 'permissions' },
+                { text: '評估啟用多重驗證與 IP 限制；設定 IP 前先確認辦公室對外 IP 是否固定，設錯會導致無人能登入。', link: 'ipSettings' },
+                { text: '決定通知對象與狀態，避免通知過量。', link: 'notifications' },
+                { text: '確認專案項目設定、各狀態使用項目、權限管理三處一致，否則欄位被隱藏或無權限會造成無法建立單據。', link: 'statusSettings' },
+                { text: '檢視狀態流程是否符合現場（是否線性、能否跳關）及是否要用案件群組。', link: 'caseGroup' },
+                { text: '顏色提醒是否需要更多階段（例如交期前預警）或套用到其他狀態。', link: 'statusSettings' },
+                { text: '校對 AI 提示詞準確率，必要時為各客戶建立顧客別提示詞；沿用圖號規則（如 EG2601F-MS10-03-xxx，拆分圖用 (1/2)、(2/2)）。', link: 'aiPrompt' },
+            ].map(c => ({ ...c, done: false })),
+        };
+    }
+
+    // 權限
+    const ROLES = ['管理員', '一般1', '一般2', '一般3'];
+    const PERM_ROWS = {
+        '基本操作': [
+            { key: 'drawing', label: '圖面', ops: ['檢視', '新增', '編輯', '刪除'] },
+            { key: 'project', label: '專案', ops: ['檢視', '新增', '編輯', '刪除'] },
+            { key: 'drawingFile', label: '圖面檔案', ops: ['檢視', '編輯', '下載'] },
+        ],
+        '圖面基本項目': ['客戶名稱', '圖號', '品名'].map((l, i) => ({ key: 'db' + i, label: l, ops: ['檢視', '編輯'] })),
+        '圖面詳細項目': ['工程案號', '材質', '熱處理'].map((l, i) => ({ key: 'dd' + i, label: l, ops: ['檢視', '編輯'] })),
+        '相關資料': ['報價單', '訂單', '工序單', '檢驗報告', '不良品管理表', '產品樣本'].map((l, i) => ({ key: 'rd' + i, label: l, ops: ['檢視', '編輯', '下載'] })),
+        '專案項目': [
+            { key: 'pQuote', label: '報價相關欄位（報價單號・單價）', ops: ['檢視', '編輯'] },
+            { key: 'pDelivery', label: '交貨相關欄位（交貨日期・數量）', ops: ['檢視', '編輯'] },
+            { key: 'pBilling', label: '請款相關欄位（開立發票・請款日期）', ops: ['檢視', '編輯'] },
+            { key: 'pOther', label: '其他專案項目', ops: ['檢視', '編輯'] },
+        ],
+    };
+    function defaultPerms() {
+        const p = {};
+        ROLES.slice(1).forEach(r => {
+            p[r] = {};
+            Object.values(PERM_ROWS).flat().forEach(row => {
+                if (row.key === 'drawing' || row.key === 'project') p[r][row.key] = ['檢視', '新增'];
+                else if (row.key === 'drawingFile') p[r][row.key] = ['檢視', '編輯', '下載'];
+                else p[r][row.key] = [...row.ops];
+            });
+        });
+        return p;
+    }
+
+    // 樣本資料（不寫入設定儲存）
+    function sampleDrawings() {
+        const names = ['底座', '支撐架', '法蘭', '軸套', '蓋板', '吊耳', '加強肋', '導軌', '框架'];
+        const mats = ['SS400', 'S45C', 'SUS304', 'A36'];
+        return Array.from({ length: 18 }, (_, i) => {
+            const n = String(i % 9 + 1).padStart(3, '0');
+            const split = i >= 16 ? ` (${i - 15}/2)` : '';
+            return {
+                id: i + 1,
+                customer: i % 3 === 0 ? 'TEST' : 'CSBC高雄',
+                drawingNo: `EG2601F-MS10-0${Math.floor(i / 9) + 3}-${n}${split}`,
+                name: names[i % 9],
+                caseNo: i % 4 === 3 ? '' : `EG2601F-${String(i % 5 + 1).padStart(2, '0')}`,
+                material: mats[i % 4],
+                heat: i % 3 === 0 ? '調質' : (i % 3 === 1 ? '' : '退火'),
+                note: i % 5 === 0 ? '急件' : '',
+                createdAt: daysAgo(i * 3),
+                updatedAt: daysAgo(i % 7),
+            };
+        });
+    }
+    function sampleProjects() {
+        return STATUSES.flatMap((s, si) => Array.from({ length: si % 3 === 0 ? 2 : 1 }, (_, k) => {
+            const id = si * 10 + k + 1;
+            return {
+                id, status: si, caseNo: `EG2601F-${String(id).padStart(3, '0')}`,
+                customer: id % 2 ? 'CSBC高雄' : 'TEST', projectName: `船段結構件 ${id}`,
+                quoteNo: `Q26-${String(id).padStart(4, '0')}`, orderNo: si >= 2 ? `PO-${7000 + id}` : '',
+                unit: 'PCS', drawingNo: `EG2601F-MS10-03-${String(si + 1).padStart(3, '0')}`, name: ['底座', '法蘭', '支撐架'][id % 3],
+                material: ['SS400', 'SUS304'][id % 2], qty: (id % 5 + 1) * 2, subcon: '', site: '高雄廠', method: ['雷射切割', '車床', '銑床'][id % 3],
+                dueDate: daysLater(k ? -2 : 10 + si), deliveryDate: si >= 11 ? daysLater(-2) : '', deliveryQty: si >= 11 ? (id % 5 + 1) * 2 : '',
+                invoiced: si === 12 ? '已開立' : '', billingDate: si === 12 ? daysLater(-1) : '', note: k ? '' : '—',
+            };
+        }));
+    }
+
+    function load() {
+        const base = defaultState();
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (raw) return Object.assign(base, JSON.parse(raw));
+        } catch (e) { /* 無法讀取時使用預設值 */ }
+        return base;
+    }
+
+    createApp({
+        setup() {
+            const s = reactive(load());
+            if (!s.perms) s.perms = defaultPerms();
+            watch(() => s, v => {
+                try { localStorage.setItem(STORAGE_KEY, JSON.stringify(v)); } catch (e) { /* 忽略 */ }
+            }, { deep: true });
+
+            const page = ref('drawings');
+            const toastMsg = ref('');
+            let toastTimer;
+            const toast = m => { toastMsg.value = m; clearTimeout(toastTimer); toastTimer = setTimeout(() => toastMsg.value = '', 2200); };
+            const go = p => { page.value = p; window.scrollTo(0, 0); };
+
+            const topTabs = [
+                { id: 'drawings', label: '圖面列表', icon: 'fa-regular fa-file-lines' },
+                { id: 'projects', label: '專案列表', icon: 'fa-solid fa-diagram-project' },
+                { id: 'settings', label: '設定', icon: 'fa-solid fa-gear' },
+                { id: 'help', label: '說明', icon: 'fa-regular fa-circle-question' },
+            ];
+
+            // ---------- 圖面列表 ----------
+            const drawings = ref(sampleDrawings());
+            const drawingFilterFields = [
+                { key: 'customer', label: '客戶名稱' }, { key: 'drawingNo', label: '圖號' }, { key: 'name', label: '品名' },
+                { key: 'caseNo', label: '工程案號' }, { key: 'material', label: '材質' }, { key: 'heat', label: '熱處理' }, { key: 'note', label: '備註' },
+            ];
+            const emptyDrawingFilter = () => ({ customer: '', drawingNo: '', name: '', caseNo: '', material: '', heat: '', note: '', dateFrom: '', dateTo: '', missing: '', unreadOnly: false });
+            const drawingFilter = reactive(emptyDrawingFilter());
+            const clearDrawingFilters = () => Object.assign(drawingFilter, emptyDrawingFilter());
+            const drawingView = ref('preview');
+            const drawingSort = reactive({ key: 'updatedAt', desc: true });
+            const drawingPageSize = ref(25);
+            const readIds = reactive(new Set());
+            const isNewDrawing = d => (TODAY - new Date(d.createdAt)) < 7 * DAY && !readIds.has(d.id);
+
+            const filteredDrawings = computed(() => {
+                const f = drawingFilter;
+                let list = drawings.value.filter(d => {
+                    for (const ff of drawingFilterFields) {
+                        if (f[ff.key] && !String(d[ff.key] || '').toLowerCase().includes(f[ff.key].toLowerCase())) return false;
+                    }
+                    const c = d.createdAt.slice(0, 10);
+                    if (f.dateFrom && c < f.dateFrom) return false;
+                    if (f.dateTo && c > f.dateTo) return false;
+                    if (f.missing && d[f.missing]) return false;
+                    if (f.unreadOnly && !isNewDrawing(d)) return false;
+                    return true;
+                });
+                const k = drawingSort.key;
+                list = [...list].sort((a, b) => (a[k] > b[k] ? 1 : a[k] < b[k] ? -1 : 0) * (drawingSort.desc ? -1 : 1));
+                return list;
+            });
+            const pagedDrawings = computed(() => filteredDrawings.value.slice(0, drawingPageSize.value));
+            const drawingBasicVisible = computed(() => s.dualLists.drawingBasic.visible);
+            const drawingListColumns = computed(() => [...s.dualLists.drawingBasic.visible, ...s.dualLists.drawingDetail.visible]
+                .filter(c => drawingFilterFields.some(f => f.key === c.key)));
+
+            const newDrawing = ref(null);
+            const openNewDrawing = () => { newDrawing.value = Object.fromEntries(drawingFilterFields.map(f => [f.key, ''])); };
+            const saveNewDrawing = () => {
+                if (!newDrawing.value.drawingNo) return toast('請輸入圖號');
+                const now = new Date().toISOString();
+                drawings.value.unshift({ ...newDrawing.value, id: Date.now(), createdAt: now, updatedAt: now });
+                toast('已登錄圖面 ' + newDrawing.value.drawingNo);
+                if (s.toggles.continuousEntry) openNewDrawing(); else newDrawing.value = null;
+            };
+
+            // ---------- 專案列表 ----------
+            const projects = ref(sampleProjects());
+            const projectTab = ref(-1);
+            const emptyProjectFilter = () => ({ customer: '', projectName: '', unit: '', detail: '' });
+            const projectFilter = reactive(emptyProjectFilter());
+            const clearProjectFilters = () => Object.assign(projectFilter, emptyProjectFilter());
+            const filteredProjectsAll = computed(() => projects.value.filter(p => {
+                const f = projectFilter;
+                if (f.customer && p.customer !== f.customer) return false;
+                if (f.unit && p.unit !== f.unit) return false;
+                if (f.projectName && !p.projectName.includes(f.projectName)) return false;
+                if (f.detail && ![p.name, p.drawingNo, p.note, p.caseNo].join(' ').includes(f.detail)) return false;
+                return true;
+            }));
+            const countByStatus = i => filteredProjectsAll.value.filter(p => p.status === i).length;
+            const tabProjects = computed(() => projectTab.value === -1 ? filteredProjectsAll.value : filteredProjectsAll.value.filter(p => p.status === projectTab.value));
+            const projectColumns = computed(() => {
+                const used = s.dualLists.projectItems.visible;
+                if (projectTab.value === -1) return used;
+                return used.filter(c => c.key === 'status' || (s.statusUsage[c.key] && s.statusUsage[c.key][projectTab.value]));
+            });
+            const rowColor = p => {
+                for (const r of s.colorRules) {
+                    if (!r.statuses.includes(p.status) || !p[r.field]) continue;
+                    const d = new Date(p[r.field]); d.setHours(0, 0, 0, 0);
+                    const diff = (TODAY - d) / DAY; // 正值：今天已超過該日期
+                    if (r.cond === 'after' && diff > 0) return r.color;
+                    if (r.cond === 'today' && diff === 0) return r.color;
+                    if (r.cond === 'within' && diff <= 0 && -diff <= (r.days || 0)) return r.color;
+                }
+                return null;
+            };
+
+            // ---------- 說明 ----------
+            const helpCategories = [
+                { title: '圖面與資料登錄', icon: 'fa-solid fa-file-circle-plus', articles: ['新增圖面', '批次登錄', '登錄相關資料', '3DCAD 預覽', '3D 組裝模型說明'] },
+                { title: '開始使用', icon: 'fa-solid fa-flag-checkered', articles: ['畫面構成', '初次登入', '基本操作流程'] },
+                { title: '變更設定', icon: 'fa-solid fa-sliders', articles: ['圖面項目設定', '專案項目設定', '各狀態的設定', '通知設定'] },
+                { title: '檔案操作', icon: 'fa-solid fa-folder-open', articles: ['上傳與下載', '版本管理', 'Excel 範本'] },
+                { title: '帳號管理', icon: 'fa-solid fa-users-gear', articles: ['邀請帳號', '權限管理', '多重驗證', 'IP 位址限制'] },
+                { title: '圖面與資料搜尋', icon: 'fa-solid fa-magnifying-glass', articles: ['自由文字搜尋', '篩選條件', '未輸入搜尋'] },
+                { title: '客戶資訊管理', icon: 'fa-solid fa-address-book', articles: ['交易對象主檔', '單位主控'] },
+                { title: '常見問題', icon: 'fa-regular fa-circle-question', articles: ['無法建立報價單', '收不到通知', '無法登入'] },
+            ];
+            const helpSearch = ref('');
+            const filteredHelp = computed(() => {
+                const q = helpSearch.value.trim();
+                if (!q) return helpCategories;
+                return helpCategories.map(c => c.title.includes(q) ? c : { ...c, articles: c.articles.filter(a => a.includes(q)) }).filter(c => c.articles.length);
+            });
+
+            // ---------- 自由文字搜尋 ----------
+            const globalSearch = ref('');
+            const searchKeyword = ref('');
+            const runGlobalSearch = () => { searchKeyword.value = globalSearch.value.trim(); if (searchKeyword.value) go('search'); };
+            const searchResults = computed(() => {
+                const q = searchKeyword.value.toLowerCase();
+                const hit = o => Object.values(o).some(v => String(v).toLowerCase().includes(q));
+                return { drawings: drawings.value.filter(hit), projects: projects.value.filter(hit) };
+            });
+
+            // ---------- 設定選單 ----------
+            const settingMenu = [
+                { group: '帳戶', items: [{ id: 'myAccount', label: '我的帳戶' }, { id: 'accounts', label: '帳戶管理' }, { id: 'logs', label: '操作記錄' }] },
+                { group: '圖面', items: [
+                    { id: 'drawingBasic', label: '圖面基本項目設定' }, { id: 'drawingDetail', label: '圖面詳細項目設定' }, { id: 'aiPrompt', label: 'AI 提示詞設定' },
+                    { id: 'relatedDocs', label: '相關資料設定' }, { id: 'excelTemplate', label: 'Excel 範本設定' }, { id: 'stamps', label: '印章設定' },
+                    { id: 'assembly', label: '組合圖設定' }, { id: 'continuousEntry', label: '新增圖面登錄設定' }] },
+                { group: '專案', items: [{ id: 'projectItems', label: '專案項目設定' }, { id: 'statusSettings', label: '各狀態的設定' }, { id: 'caseGroup', label: '案件群組設定' }] },
+                { group: '單據', items: [{ id: 'quoteSettings', label: '報價單設定' }, { id: 'deliverySettings', label: '交貨單設定' }, { id: 'invoiceSettings', label: '發票設定' }] },
+                { group: '主控', items: [{ id: 'partners', label: '交易對象主檔' }, { id: 'units', label: '單位主控' }] },
+                { group: '其他', items: [
+                    { id: 'permissions', label: '權限管理' }, { id: 'ipSettings', label: '可用IP位址設定' }, { id: 'notifications', label: '通知設定' },
+                    { id: 'company', label: '公司資訊' }, { id: 'locale', label: '語言與時區' }] },
+            ];
+            const settingPage = ref('checklist');
+            const currentSettingLabel = computed(() => settingPage.value === 'checklist' ? '設定檢查清單'
+                : settingMenu.flatMap(g => g.items).find(i => i.id === settingPage.value)?.label);
+            const settingDesc = {
+                checklist: '尚待處理的設定項目，勾選後會保存在此瀏覽器。',
+                accounts: '邀請、刪除、變更權限（重新登入後生效）。',
+                logs: '預設顯示近 7 天的操作記錄。',
+                drawingBasic: '決定圖面列表顯示的項目，可拖曳排序；標「AI」的項目交給 AI 填寫。',
+                drawingDetail: '圖面詳細頁的附加資訊，可作為搜尋軸。',
+                aiPrompt: '對「交給 AI」的項目給具體指示。',
+                relatedDocs: '與圖面關聯的文件類別。',
+                excelTemplate: '依文件類別上傳 Excel 範本。',
+                projectItems: '拖曳調整「使用項目」與「不使用項目」。',
+                statusSettings: '顯示方式、各狀態使用項目、日期欄位著色。',
+                partners: '客戶／廠商清單，可拖曳排序、新增、設定初始值。',
+                units: '報價單與單位欄位依賴此資料。',
+                permissions: '管理員為全權且固定；一般1～3 可用「權限編輯」調整。',
+                ipSettings: '允許使用系統的 IP 群組（單一 IP 或 CIDR，可多筆）。',
+                notifications: '以帳號為列，逐項開關 Email 通知。',
+                company: '帳票上使用的公司資訊。',
+                locale: '每帳號的語言、時區、日期格式。',
+            };
+            const toggleSettings = {
+                assembly: { label: '使用組合圖功能', hint: '開啟後，圖面詳細的「組圖」頁籤會顯示樹狀圖。' },
+                continuousEntry: { label: '新增圖面時連續輸入圖面資訊', hint: '登錄後保留表單，可連續輸入下一張圖面。' },
+                caseGroup: { label: '使用案件群組名稱', hint: '案件群組編號永遠顯示；開啟後可另外設定群組名稱。' },
+            };
+
+            // ---------- 雙欄拖曳 ----------
+            let dragFrom = null;
+            const onDragStart = (e, col, idx) => { dragFrom = { col, idx }; e.target.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; };
+            const onDrop = (e, col, idx) => {
+                document.querySelectorAll('.drop-zone.over').forEach(el => el.classList.remove('over'));
+                if (!dragFrom) return;
+                const lists = s.dualLists[settingPage.value];
+                const item = lists[dragFrom.col][dragFrom.idx];
+                if (item.locked && col === 'hidden') { dragFrom = null; return toast('狀態項目不能移到不使用區'); }
+                lists[dragFrom.col].splice(dragFrom.idx, 1);
+                let to = idx ?? lists[col].length;
+                if (dragFrom.col === col && idx !== undefined && dragFrom.idx < idx) to--;
+                lists[col].splice(Math.max(0, to), 0, item);
+                dragFrom = null;
+            };
+            const moveDual = (col, idx) => {
+                const lists = s.dualLists[settingPage.value];
+                const item = lists[col][idx];
+                if (item.locked) return toast('狀態項目不能移到不使用區');
+                lists[col].splice(idx, 1);
+                lists[col === 'visible' ? 'hidden' : 'visible'].push(item);
+            };
+            const newItem = reactive({ label: '', type: '文字' });
+            const addDualItem = () => {
+                const label = newItem.label.trim();
+                if (!label) return;
+                const lists = s.dualLists[settingPage.value];
+                if ([...lists.visible, ...lists.hidden].some(i => i.label === label)) return toast('項目已存在');
+                lists.hidden.push(it('custom' + Date.now(), label, settingPage.value === 'relatedDocs' ? '' : newItem.type));
+                newItem.label = '';
+            };
+
+            // ---------- AI 提示詞 ----------
+            const aiItems = computed(() => [...s.dualLists.drawingBasic.visible, ...s.dualLists.drawingBasic.hidden,
+                ...s.dualLists.drawingDetail.visible, ...s.dualLists.drawingDetail.hidden].filter(i => i.ai).map(i => i.label));
+            const newPrompt = reactive({ item: '', customer: '' });
+            const addCommonPrompt = () => {
+                if (!newPrompt.item) return toast('請選擇 AI 項目');
+                if (s.aiPrompts.common.some(p => p.item === newPrompt.item)) return toast('此項目已有共用提示詞');
+                s.aiPrompts.common.push({ item: newPrompt.item, prompt: '' });
+            };
+            const addCustomerPrompt = () => {
+                if (!newPrompt.item || !newPrompt.customer) return toast('請選擇客戶與 AI 項目');
+                s.aiPrompts.customer.push({ customer: newPrompt.customer, item: newPrompt.item, prompt: '' });
+            };
+
+            // ---------- Excel / 印章 ----------
+            const excelTabs = ['報價單', '訂單', '工序單', '檢驗報告', '不良品管理表', '產品樣本'];
+            const excelTab = ref('報價單');
+            const uploadExcel = e => { const f = e.target.files[0]; if (f) { s.excelTemplates[excelTab.value].push(f.name); toast('已上傳 ' + f.name); } e.target.value = ''; };
+            const newStamp = ref('');
+            const addStamp = () => { const v = newStamp.value.trim(); if (v) { s.stamps.push(v); newStamp.value = ''; } };
+
+            // ---------- 各狀態的設定 ----------
+            const statusTab = ref('顯示設定');
+            const projectUsedNonStatus = computed(() => s.dualLists.projectItems.visible.filter(i => i.key !== 'status'));
+            const toggleUsage = (key, i, on) => {
+                if (!s.statusUsage[key]) s.statusUsage[key] = STATUSES.map(() => false);
+                s.statusUsage[key][i] = on;
+            };
+            const dateFields = computed(() => [...s.dualLists.projectItems.visible, ...s.dualLists.projectItems.hidden].filter(i => i.type === '日期'));
+            const moveRule = (i, d) => { const r = s.colorRules.splice(i, 1)[0]; s.colorRules.splice(i + d, 0, r); };
+
+            // ---------- 單據 ----------
+            const quoteTab = ref('標準報價單');
+            const addDocMode = () => {
+                const name = prompt('模式名稱'); if (!name) return;
+                const cols = prompt('明細欄位（以・分隔）', '圖號・品名・材質') || '';
+                s.docSettings[settingPage.value].modes.push({ name, cols });
+            };
+            const addDocTemplate = () => {
+                const name = prompt('帳票範本名稱', currentSettingLabel.value.replace('設定', '') + '範本'); if (!name) return;
+                s.docSettings[settingPage.value].templates.push(name);
+            };
+
+            // ---------- 主控 ----------
+            const masterList = computed(() => settingPage.value === 'partners' ? s.partners : s.units);
+            const newMaster = reactive({ name: '', kind: '客戶' });
+            const addMaster = () => {
+                const name = newMaster.name.trim(); if (!name) return;
+                if (masterList.value.some(m => m.name === name)) return toast('名稱已存在');
+                masterList.value.push({ id: Date.now(), name, kind: newMaster.kind, isDefault: false });
+                newMaster.name = '';
+            };
+            const masterDrag = ref(null);
+            const dropMaster = idx => {
+                if (masterDrag.value === null) return;
+                const list = masterList.value; const [m] = list.splice(masterDrag.value, 1);
+                list.splice(idx, 0, m); masterDrag.value = null;
+            };
+            const setDefaultPartner = p => s.partners.forEach(x => x.isDefault = x === p);
+
+            // ---------- 帳號 ----------
+            const inviteAccount = () => {
+                const email = prompt('邀請的 Email'); if (!email) return;
+                s.accounts.push({ id: Date.now(), name: email.split('@')[0], email, role: '一般1' });
+                toast('已寄出邀請（語言與時區套用新邀請帳號預設值）');
+            };
+            const removeAccount = a => {
+                if (a.role === '管理員' && s.accounts.filter(x => x.role === '管理員').length <= 1) return toast('至少須保留一位管理員');
+                if (confirm(`確定刪除 ${a.name}？`)) s.accounts.splice(s.accounts.indexOf(a), 1);
+            };
+
+            // ---------- 操作記錄 ----------
+            const logs = [
+                { id: 1, at: daysAgo(0), user: '劉雅昀', screen: '圖面詳細', target: 'EG2601F-MS10-03-001', op: '參考' },
+                { id: 2, at: daysAgo(1), user: 'EGH', screen: '專案列表', target: 'EG2601F-021', op: '編輯' },
+                { id: 3, at: daysAgo(2), user: '劉雅昀', screen: '設定', target: '公司資訊', op: '編輯' },
+                { id: 4, at: daysAgo(5), user: 'EGH', screen: '圖面詳細', target: 'EG2601F-MS10-04-002', op: '下載' },
+                { id: 5, at: daysAgo(12), user: '劉雅昀', screen: '圖面列表', target: 'EG2601F-MS10-03-005', op: '新增' },
+            ];
+            const logFilter = reactive({ from: daysAgo(7).slice(0, 10), to: TODAY.toISOString().slice(0, 10), user: '', op: '' });
+            const filteredLogs = computed(() => logs.filter(l => {
+                const d = l.at.slice(0, 10);
+                return (!logFilter.from || d >= logFilter.from) && (!logFilter.to || d <= logFilter.to)
+                    && (!logFilter.user || l.user === logFilter.user) && (!logFilter.op || l.op === logFilter.op);
+            }));
+
+            // ---------- 權限 ----------
+            const permTabs = Object.keys(PERM_ROWS);
+            const permTab = ref('基本操作');
+            const permRows = computed(() => PERM_ROWS[permTab.value]);
+            const permEditRole = ref('');
+            const hasPerm = (r, k, op) => (s.perms[r]?.[k] || []).includes(op);
+            const setPerm = (r, k, op, on) => {
+                const list = s.perms[r][k] || (s.perms[r][k] = []);
+                if (on && !list.includes(op)) list.push(op);
+                if (!on) list.splice(list.indexOf(op), 1);
+            };
+            const permText = (r, k) => { const l = s.perms[r]?.[k] || []; return l.length ? l.join('・') : '不可檢視'; };
+            const permWarnings = computed(() => {
+                const w = [];
+                ROLES.slice(1).forEach(r => {
+                    if (!hasPerm(r, 'pQuote', '編輯')) w.push(`${r}：缺少報價相關欄位編輯權限 → 無法製作報價單`);
+                    if (!hasPerm(r, 'pDelivery', '編輯')) w.push(`${r}：缺少交貨相關欄位編輯權限 → 無法建立交貨單`);
+                    if (!hasPerm(r, 'pBilling', '編輯')) w.push(`${r}：缺少請款相關欄位編輯權限 → 無法建立發票`);
+                });
+                return w;
+            });
+
+            // ---------- IP ----------
+            const currentIp = '203.0.113.25';
+            const validIp = v => {
+                const m = v.trim().match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(\/(\d{1,2}))?$/);
+                return !!m && m.slice(1, 5).every(n => +n <= 255) && (!m[6] || +m[6] <= 32);
+            };
+            const ipToInt = ip => ip.split('.').reduce((a, n) => (a << 8) + +n, 0) >>> 0;
+            const ipMatch = (ip, rule) => {
+                if (!validIp(rule)) return false;
+                const [base, bits = '32'] = rule.trim().split('/');
+                const mask = +bits === 0 ? 0 : (~0 << (32 - +bits)) >>> 0;
+                return (ipToInt(ip) & mask) === (ipToInt(base) & mask);
+            };
+            const ipCoversCurrent = computed(() => s.ipGroups.some(g => g.ips.some(r => ipMatch(currentIp, r))));
+            watch(() => s.ipGroups.length, n => { if (!n) s.security.ipRestrict = 'none'; });
+
+            // ---------- 通知 ----------
+            const notifyTab = ref('上傳檔案');
+            const notifyCols = computed(() => notifyTab.value === '上傳檔案'
+                ? ['圖面', '報價單', '訂單', '工序單', '檢驗報告', '不良品管理表', '產品樣本'] : STATUSES.map(x => x.zh));
+            const nKey = (id, c) => `${notifyTab.value}|${id}|${c}`;
+            const getNotify = (id, c) => !!s.notify[nKey(id, c)];
+            const setNotify = (id, c, on) => { if (on) s.notify[nKey(id, c)] = true; else delete s.notify[nKey(id, c)]; };
+            const notifyOnCount = computed(() => Object.keys(s.notify).length);
+
+            // ---------- 公司資訊 ----------
+            const companyFields = [
+                { key: 'name', label: '公司名稱' }, { key: 'zip', label: '郵遞區號' }, { key: 'addr1', label: '地址1' }, { key: 'addr2', label: '地址2' },
+                { key: 'tel', label: '電話' }, { key: 'fax', label: '傳真' }, { key: 'email', label: 'Email' }, { key: 'taxId', label: '統一編號' },
+            ];
+            const sampleDefaults = defaultState().company;
+            const companyFieldIssue = k => {
+                const v = s.company[k];
+                if (['zip', 'addr2', 'fax', 'email'].includes(k) && v === sampleDefaults[k]) return '仍是日本範例預設值';
+                if (k === 'taxId' && !/^\d{8}$/.test(v || '')) return v ? '統一編號應為 8 碼數字' : '尚未填寫';
+                if (!v && ['name', 'addr1', 'tel'].includes(k)) return '尚未填寫';
+                return '';
+            };
+            const companyIncomplete = computed(() => companyFields.some(f => companyFieldIssue(f.key)));
+            const uploadImage = (e, key) => {
+                const f = e.target.files[0]; if (!f) return;
+                if (f.size > 1024 * 1024) { toast('檔案需 1MB 以下'); e.target.value = ''; return; }
+                const r = new FileReader(); r.onload = () => s.company[key] = r.result; r.readAsDataURL(f);
+                e.target.value = '';
+            };
+
+            const checklistDone = computed(() => s.checklist.filter(c => c.done).length);
+
+            const fmtDate = iso => { const d = new Date(iso); return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`; };
+            const fmtDateTime = iso => { const d = new Date(iso); return fmtDate(iso) + ` ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+
+            return {
+                ...Vue.toRefs(s), statuses: STATUSES, roles: ROLES,
+                page, go, topTabs, toast, toastMsg,
+                drawings, drawingFilterFields, drawingFilter, clearDrawingFilters, drawingView, drawingSort, drawingPageSize,
+                filteredDrawings, pagedDrawings, drawingBasicVisible, drawingListColumns, isNewDrawing, newDrawing, openNewDrawing, saveNewDrawing,
+                projects, projectTab, projectFilter, clearProjectFilters, filteredProjectsAll, countByStatus, tabProjects, projectColumns, rowColor,
+                helpSearch, filteredHelp, globalSearch, searchKeyword, runGlobalSearch, searchResults,
+                settingMenu, settingPage, currentSettingLabel, settingDesc, toggleSettings,
+                onDragStart, onDrop, moveDual, newItem, addDualItem,
+                aiItems, newPrompt, addCommonPrompt, addCustomerPrompt,
+                excelTabs, excelTab, uploadExcel, newStamp, addStamp,
+                statusTab, projectUsedNonStatus, toggleUsage, dateFields, moveRule,
+                quoteTab, addDocMode, addDocTemplate,
+                masterList, newMaster, addMaster, masterDrag, dropMaster, setDefaultPartner,
+                inviteAccount, removeAccount, logFilter, filteredLogs,
+                permTabs, permTab, permRows, permEditRole, hasPerm, setPerm, permText, permWarnings,
+                currentIp, validIp, ipCoversCurrent,
+                notifyTab, notifyCols, getNotify, setNotify, notifyOnCount,
+                companyFields, companyFieldIssue, companyIncomplete, uploadImage,
+                checklistDone, fmtDate, fmtDateTime,
+            };
+        }
+    }).mount('#app');
+</script>
+</body>
+</html>
